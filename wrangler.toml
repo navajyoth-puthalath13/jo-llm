@@ -2,6 +2,8 @@ name = "jo-llm"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 workers_dev = true
+# No per-version preview URLs: one public address only.
+preview_urls = false
 
 # jo.md ships inside the Worker as a string. No runtime file reads.
 [[rules]]
@@ -24,7 +26,7 @@ JO_FORCE_OFF = "false"
 # Kill switch (jo:enabled) and answer cache. Create with: npx wrangler kv namespace create JO_KV
 [[kv_namespaces]]
 binding = "JO_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "20e0979abe9146cf97277dfb03a858c4"
 
 # Per-IP and global daily counters (SQLite-backed Durable Objects are on the free plan).
 [[durable_objects.bindings]]
