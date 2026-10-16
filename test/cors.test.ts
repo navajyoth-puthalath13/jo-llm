@@ -41,6 +41,50 @@ describe("CORS and headers", () => {
     expect(res.status).toBe(403);
   });
 
+  describe("wildcard origins (Vercel previews)", () => {
+    const PREVIEWS = "https://navajyoth.com,https://portfolio-*-navajyoth-puthalath13s-projects.vercel.app";
+
+    it.each([
+      "https://portfolio-git-feat-ask-jo-navajyoth-puthalath13s-projects.vercel.app",
+      "https://portfolio-a1b2c3d4e-navajyoth-puthalath13s-projects.vercel.app",
+    ])("allows %s", async (origin) => {
+      const ctx = setup({ env: { ALLOWED_ORIGINS: PREVIEWS } });
+      const res = await ctx.app.request("/status", { headers: { Origin: origin } }, ctx.env);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    });
+
+    it.each([
+      // a dot can't hide inside the wildcard
+      "https://portfolio-x.evil.com-navajyoth-puthalath13s-projects.vercel.app",
+      // suffix on another host
+      "https://portfolio-x-navajyoth-puthalath13s-projects.vercel.app.evil.com",
+      // wrong scheme, someone else's scope, empty wildcard, port
+      "http://portfolio-x-navajyoth-puthalath13s-projects.vercel.app",
+      "https://portfolio-x-someone-else-projects.vercel.app",
+      "https://portfolio--navajyoth-puthalath13s-projects.vercel.app",
+      "https://portfolio-x-navajyoth-puthalath13s-projects.vercel.app:8443",
+    ])("rejects %s", async (origin) => {
+      const ctx = setup({ env: { ALLOWED_ORIGINS: PREVIEWS } });
+      const res = await ctx.app.request("/status", { headers: { Origin: origin } }, ctx.env);
+      expect(res.status).toBe(403);
+    });
+
+    it("answers preflight and streams /ask to a preview origin", async () => {
+      const origin = "https://portfolio-git-main-navajyoth-puthalath13s-projects.vercel.app";
+      const ctx = setup({ env: { ALLOWED_ORIGINS: PREVIEWS } });
+      const pre = await ctx.app.request(
+        "/ask",
+        { method: "OPTIONS", headers: { Origin: origin, "Access-Control-Request-Method": "POST" } },
+        ctx.env,
+      );
+      expect(pre.status).toBe(204);
+      const res = await ask(ctx, { question: "What do you do?" }, { origin });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    });
+  });
+
   it("sets security headers and streams to allowed origins", async () => {
     const ctx = setup();
     const res = await ask(ctx, { question: "What do you do?" });

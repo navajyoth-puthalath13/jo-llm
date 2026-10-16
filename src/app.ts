@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import joMdDefault from "../content/jo.md";
 import { generateAnswer } from "./answer";
 import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
-import { loadConfig, type Config, type Env } from "./config";
+import { isAllowedOrigin, loadConfig, type Config, type Env } from "./config";
 import { isEnabled } from "./guard/killswitch";
 import { hashIp, type Limiter } from "./guard/ratelimit";
 import { parseAsk, readCappedBody } from "./guard/validate";
@@ -69,7 +69,7 @@ export function createApp(deps: AppDeps) {
     const config = loadConfig(c.env);
     c.set("config", config);
     const origin = c.req.header("Origin") ?? null;
-    if (origin !== null && !config.allowedOrigins.includes(origin)) return c.text("Forbidden", 403);
+    if (origin !== null && !isAllowedOrigin(origin, config.allowedOrigins)) return c.text("Forbidden", 403);
     if (origin === null && c.req.path === "/ask") return c.text("Forbidden", 403);
     c.set("origin", origin);
     await next();

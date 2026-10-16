@@ -12,7 +12,10 @@ globs = ["**/*.md"]
 fallthrough = false
 
 [vars]
-ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com"
+# Exact origins, or `*` wildcards (letters/digits/hyphens only, never a dot). The
+# last entry lets the portfolio's Vercel previews (branch and per-deploy URLs)
+# call Jo; that suffix is this Vercel account's own scope.
+ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com,https://portfolio-*-navajyoth-puthalath13s-projects.vercel.app"
 # Links Jo may mention. Host + optional path prefix, or mailto:<address>.
 # TODO: add your LinkedIn, X and public email, e.g. linkedin.com/in/<you>,x.com/<you>,mailto:<you>@<domain>
 LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13"
