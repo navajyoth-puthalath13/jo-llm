@@ -1,0 +1,204 @@
+import { Hono, type Context } from "hono";
+import joMdDefault from "../content/jo.md";
+import { generateAnswer } from "./answer";
+import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
+import { loadConfig, type Config, type Env } from "./config";
+import { isEnabled } from "./guard/killswitch";
+import { hashIp, type Limiter } from "./guard/ratelimit";
+import { parseAsk, readCappedBody } from "./guard/validate";
+import { buildSystemPrompt, buildUserMessage } from "./prompt";
+import { defaultProviders } from "./providers/router";
+import type { Provider } from "./providers/types";
+import { createEventStream, errorResponse, SSE_HEADERS, type ErrorCode } from "./sse";
+
+export interface AppDeps {
+  /** Builds the limiter for a request. Production wires the Durable Object here. */
+  limiter: (env: Env, config: Config) => Limiter;
+  /** Override providers (tests). Defaults to Gemini → Groq. */
+  providers?: (config: Config) => Provider[];
+  joMd?: string;
+}
+
+type AppEnv = { Bindings: Env; Variables: { config: Config; origin: string | null } };
+
+/** Logs counts, latency, provider and outcome only. Never questions, never IPs or their hashes. */
+function logEvent(fields: Record<string, string | number | boolean | undefined>) {
+  console.log(JSON.stringify({ evt: "ask", ...fields }));
+}
+
+const STATUS_FOR: Record<ErrorCode, number> = {
+  invalid: 400,
+  rate_limited: 429,
+  offline: 503,
+  busy: 503,
+  offtopic: 200,
+};
+
+function waitUntil(c: Context<AppEnv>, p: Promise<unknown>) {
+  try {
+    c.executionCtx.waitUntil(p);
+  } catch {
+    // No execution context (tests): the promise still runs.
+  }
+}
+
+export function createApp(deps: AppDeps) {
+  const joMd = deps.joMd ?? joMdDefault;
+  const systemPrompt = buildSystemPrompt(joMd);
+  const app = new Hono<AppEnv>();
+
+  // Security headers on every response.
+  app.use("*", async (c, next) => {
+    await next();
+    c.res.headers.set("X-Content-Type-Options", "nosniff");
+    c.res.headers.set("Referrer-Policy", "no-referrer");
+    c.res.headers.set("X-Frame-Options", "DENY");
+    c.res.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+  });
+
+  // CORS allowlist. Unknown origins are rejected before any other work.
+  app.use("*", async (c, next) => {
+    const config = loadConfig(c.env);
+    c.set("config", config);
+    const origin = c.req.header("Origin") ?? null;
+    if (origin !== null && !config.allowedOrigins.includes(origin)) return c.text("Forbidden", 403);
+    if (origin === null && c.req.path === "/ask") return c.text("Forbidden", 403);
+    c.set("origin", origin);
+    await next();
+    if (origin) {
+      c.res.headers.set("Access-Control-Allow-Origin", origin);
+      c.res.headers.append("Vary", "Origin");
+    }
+  });
+
+  app.options("*", (c) => {
+    if (!c.get("origin")) return c.text("Forbidden", 403);
+    return c.body(null, 204, {
+      "Access-Control-Allow-Methods": "GET, POST",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    });
+  });
+
+  app.get("/status", async (c) => {
+    const config = c.get("config");
+    const enabled = await isEnabled(c.env.JO_KV, config);
+    return c.json({ enabled }, 200, { "Cache-Control": `public, max-age=${config.statusMaxAgeSeconds}` });
+  });
+
+  app.post("/ask", async (c) => {
+    const config = c.get("config");
+    const started = Date.now();
+    const fail = (code: ErrorCode, extra: Record<string, string | number | boolean | undefined> = {}) => {
+      logEvent({ outcome: code, ms: Date.now() - started, ...extra });
+      return errorResponse(code, STATUS_FOR[code]);
+    };
+
+    if (!(await isEnabled(c.env.JO_KV, config))) return fail("offline");
+
+    const contentType = c.req.header("Content-Type") ?? "";
+    if (!contentType.toLowerCase().startsWith("application/json")) return fail("invalid");
+    const raw = await readCappedBody(c.req.raw, config.maxBodyBytes);
+    if (raw === null) return fail("invalid");
+    const input = parseAsk(raw);
+    if (!input) return fail("invalid");
+
+    if (!config.ipSalt) return fail("busy"); // misconfigured: refuse rather than key on raw IPs
+    const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+    const limiter = deps.limiter(c.env, config);
+    try {
+      if ((await limiter.hit(await hashIp(ip, config.ipSalt))) === "rate_limited") return fail("rate_limited");
+    } catch {
+      return fail("busy");
+    }
+
+    const cacheable = !input.quote && !input.history?.length;
+    const key = cacheable ? await cacheKey(input.question, joMd) : null;
+
+    if (key) {
+      const hit = await getCached(c.env.JO_KV, key);
+      if (hit) {
+        const { readable, writer } = createEventStream();
+        waitUntil(
+          c,
+          (async () => {
+            try {
+              for (const t of chunkAnswer(hit)) await writer.token(t);
+              await writer.done(true);
+            } catch {
+              // client went away
+            } finally {
+              await writer.close();
+            }
+            logEvent({ outcome: "ok", cached: true, ms: Date.now() - started });
+          })(),
+        );
+        return new Response(readable, { headers: SSE_HEADERS });
+      }
+    }
+
+    const providers = (deps.providers ?? defaultProviders)(config);
+    if (providers.length === 0) return fail("busy", { reason: "no_providers" });
+
+    try {
+      if (!(await limiter.spend())) return fail("busy", { reason: "budget" });
+    } catch {
+      return fail("busy");
+    }
+
+    const { readable, writer } = createEventStream();
+    const clientGone = new AbortController();
+
+    const run = (async () => {
+      let firstTokenMs: number | undefined;
+      const outcome = await generateAnswer({
+        providers,
+        system: systemPrompt,
+        user: buildUserMessage(input),
+        maxTokens: config.maxOutputTokens,
+        timeoutsMs: [config.firstTokenTimeoutMs, config.fallbackFirstTokenTimeoutMs],
+        totalTimeoutMs: config.totalTimeoutMs,
+        linkAllowlist: config.linkAllowlist,
+        signal: clientGone.signal,
+        onText: async (t) => {
+          firstTokenMs ??= Date.now() - started;
+          try {
+            await writer.token(t);
+          } catch (err) {
+            clientGone.abort();
+            throw err;
+          }
+        },
+        log: (provider, result) => logEvent({ outcome: "provider_fallthrough", provider, result }),
+      }).catch(() => ({ ok: false as const, code: "busy" as const, partial: false, provider: undefined }));
+
+      try {
+        if (outcome.ok) {
+          await writer.done(false);
+          if (key) await putCached(c.env.JO_KV, key, outcome.text, config.cacheTtlSeconds);
+        } else {
+          await writer.error(outcome.code);
+        }
+      } catch {
+        // client went away
+      } finally {
+        await writer.close();
+      }
+      logEvent({
+        outcome: outcome.ok ? "ok" : outcome.code,
+        provider: outcome.provider,
+        cached: false,
+        ttft: firstTokenMs,
+        ms: Date.now() - started,
+      });
+    })();
+    waitUntil(c, run);
+
+    return new Response(readable, { headers: SSE_HEADERS });
+  });
+
+  app.notFound((c) => c.text("Not found", 404));
+  app.onError((_err, c) => c.text("Error", 500));
+
+  return app;
+}

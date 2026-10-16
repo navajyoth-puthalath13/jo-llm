@@ -1,0 +1,45 @@
+name = "jo-llm"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# jo.md ships inside the Worker as a string. No runtime file reads.
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = false
+
+[vars]
+ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com"
+# Links Jo may mention. Host + optional path prefix, or mailto:<address>.
+# TODO: add your LinkedIn, X and public email, e.g. linkedin.com/in/<you>,x.com/<you>,mailto:<you>@<domain>
+LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+GROQ_MODEL = "openai/gpt-oss-120b"
+# Global model calls per day (UTC). Keep at or below 1000: also bounds KV cache writes on the free plan.
+DAILY_BUDGET = "1000"
+# Emergency override. "true" turns Jo off regardless of KV (needs a deploy or a dashboard edit).
+JO_FORCE_OFF = "false"
+
+# Kill switch (jo:enabled) and answer cache. Create with: npx wrangler kv namespace create JO_KV
+[[kv_namespaces]]
+binding = "JO_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Per-IP and global daily counters (SQLite-backed Durable Objects are on the free plan).
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Limiter"]
+
+# Burst filter in front of the Durable Object: 4 questions per 10 seconds per IP hash.
+[[ratelimits]]
+name = "BURST"
+namespace_id = "1001"
+simple = { limit = 4, period = 10 }
+
+[observability]
+enabled = true

@@ -1,0 +1,8 @@
+# Copy to .dev.vars for `wrangler dev`. Never commit .dev.vars.
+# In production, set each secret with: npx wrangler secret put <NAME>
+GEMINI_API_KEY=your-google-ai-studio-key
+GROQ_API_KEY=your-groq-key
+IP_SALT=a-long-random-string-from-openssl-rand-hex-32
+
+# Dev only: vars here override wrangler.toml [vars] locally.
+ALLOWED_ORIGINS=http://localhost:3000
