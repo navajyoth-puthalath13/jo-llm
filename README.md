@@ -123,7 +123,7 @@ The cache key includes a hash of the whole prompt (jo.md plus the rules), so old
 
 ## Security model
 
-- **Origins:** only allowlisted origins get through. `/ask` without an `Origin` is rejected with 403 before any work is done.
+- **Origins:** only allowlisted origins get through. `/ask` without an `Origin` is rejected with 403 before any work is done. `ALLOWED_ORIGINS` entries are exact origins, or contain `*` wildcards that match letters, digits and hyphens only (never a dot), used to let the portfolio's Vercel previews in: `https://portfolio-*-navajyoth-puthalath13s-projects.vercel.app`.
 - **Kill switch:** checked first. Then the body is size-capped, Zod validates it strictly, and control, zero-width and bidi characters are stripped.
 - **Rate limits:** a per-IP burst filter (4 per 10 s), then 8 per 10 min and 30 per day per IP. On top of that sits a global daily budget of model calls, which returns `busy` once spent. IPs are hashed with a secret salt, and raw IPs are never stored or logged.
 - **Prompt injection:**

@@ -88,6 +88,26 @@ function parseOrder(v: string | undefined): ProviderName[] {
 }
 
 export const DEFAULT_ORIGINS = ["https://navajyoth.com", "https://www.navajyoth.com"];
+
+/**
+ * Whether `origin` is on the allowlist. Entries are exact origins, or an origin
+ * with one or more `*` wildcards for Vercel previews, e.g.
+ * `https://portfolio-*-navajyoth-puthalath13s-projects.vercel.app`. A `*`
+ * matches letters, digits and hyphens only — never a dot, colon or slash — so
+ * it can't stretch into another host (`…vercel.app.evil.com`) or scheme.
+ */
+export function isAllowedOrigin(origin: string, allowed: string[]): boolean {
+  const o = origin.toLowerCase();
+  return allowed.some((entry) => {
+    const e = entry.toLowerCase();
+    if (!e.includes("*")) return e === o;
+    const pattern = e
+      .split("*")
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("[a-z0-9-]+");
+    return new RegExp(`^${pattern}$`).test(o);
+  });
+}
 export const DEFAULT_LINKS = ["navajyoth.com", "www.navajyoth.com", "github.com/navajyoth-puthalath13"];
 
 export function loadConfig(env: Env): Config {
