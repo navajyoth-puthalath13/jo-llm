@@ -2,8 +2,11 @@
 // Free-tier model names and limits change often: check them before each deploy.
 //   Gemini: https://ai.google.dev/gemini-api/docs/pricing (free tier) and https://aistudio.google.com/rate-limit
 //   Groq:   https://console.groq.com/docs/models and https://console.groq.com/settings/limits
-// Checked 2026-10-16: Groq's Llama chat models are no longer on free accounts; openai/gpt-oss-120b is,
-// with ~0.35–0.6s to first token. gemini-3.5-flash-lite is free (15 requests/minute) but slow to start.
+// Checked 2026-10-16 (free tier, this account):
+//   groq   openai/gpt-oss-120b, openai/gpt-oss-20b: 8,000 tokens/min and 1,000 requests/day EACH, ~0.5s to first word
+//   gemini gemini-3.5-flash-lite, gemini-3.1-flash-lite: 15 requests/min each, 2–8s to first word
+// A Jo question costs ~4,500 tokens (jo.md + rules + answer), so one Groq model serves only ~1.7
+// questions a minute. Every model has its own quota, so chaining them multiplies capacity.
 
 /** Workers Rate Limiting binding (declared locally so we don't depend on a specific workers-types version). */
 export interface RateLimitBinding {
@@ -23,11 +26,11 @@ export interface Env {
   // Vars (wrangler.toml / .dev.vars)
   ALLOWED_ORIGINS?: string;
   LINK_ALLOWLIST?: string;
-  GEMINI_MODEL?: string;
-  GROQ_MODEL?: string;
-  PROVIDER_ORDER?: string;
+  /** Models to try in order, as provider:model, e.g. "groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite". */
+  MODELS?: string;
   DAILY_BUDGET?: string;
-  PER_IP_WINDOW?: string;
+  PER_IP_BURST?: string;
+  PER_IP_REFILL_SECONDS?: string;
   PER_IP_DAILY?: string;
   JO_FORCE_OFF?: string;
   /** Local dev only: print every pipeline step. Never set this in production. */
@@ -36,25 +39,23 @@ export interface Env {
 
 export type ProviderName = "groq" | "gemini";
 
+export interface ModelChoice {
+  provider: ProviderName;
+  model: string;
+}
+
 export interface Config {
   allowedOrigins: string[];
   linkAllowlist: string[];
-  geminiModel: string;
-  groqModel: string;
-  /** Providers to try, in order. The first one gets the short first-token deadline. */
-  providerOrder: ProviderName[];
+  /** Models to try, in order. The first gets the short first-token deadline. */
+  models: ModelChoice[];
   geminiKey: string;
   groqKey: string;
   ipSalt: string;
   forceOff: boolean;
   debug: boolean;
 
-  limits: {
-    perIpWindow: number; // questions per window
-    perIpWindowSeconds: number;
-    perIpDaily: number;
-    globalDailyModelCalls: number;
-  };
+  limits: Limits;
 
   maxBodyBytes: number;
   maxOutputTokens: number;
@@ -78,13 +79,38 @@ const int = (v: string | undefined, fallback: number): number => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-// Groq first: measured 2026-10-16, Groq starts answering in ~0.5s, Gemini's free tier in 2–8s.
-const DEFAULT_ORDER: ProviderName[] = ["groq", "gemini"];
+// Fast Groq models first, slower Gemini models as extra capacity.
+export const DEFAULT_MODELS: ModelChoice[] = [
+  { provider: "groq", model: "openai/gpt-oss-120b" },
+  { provider: "groq", model: "openai/gpt-oss-20b" },
+  { provider: "gemini", model: "gemini-3.5-flash-lite" },
+  { provider: "gemini", model: "gemini-3.1-flash-lite" },
+];
 
-function parseOrder(v: string | undefined): ProviderName[] {
-  const names = list(v, DEFAULT_ORDER).filter((n): n is ProviderName => n === "groq" || n === "gemini");
-  const unique = [...new Set(names)];
-  return unique.length ? unique : DEFAULT_ORDER;
+export function parseModels(v: string | undefined): ModelChoice[] {
+  const seen = new Set<string>();
+  const out: ModelChoice[] = [];
+  for (const item of list(v, [])) {
+    const i = item.indexOf(":");
+    const provider = item.slice(0, i);
+    const model = item.slice(i + 1).trim();
+    if (i < 1 || !model || (provider !== "groq" && provider !== "gemini") || seen.has(item)) continue;
+    seen.add(item);
+    out.push({ provider, model });
+  }
+  return out.length ? out : DEFAULT_MODELS;
+}
+
+/**
+ * Per-person limits are sized so a real conversation never meets them; they exist to stop
+ * scripts. Each visitor has a bucket of `burst` questions that refills one question every
+ * `refillSeconds`. `daily` is a fairness cap so one visitor can't spend everyone's free quota.
+ */
+export interface Limits {
+  burst: number;
+  refillSeconds: number;
+  daily: number;
+  globalDailyModelCalls: number;
 }
 
 export const DEFAULT_ORIGINS = ["https://navajyoth.com", "https://www.navajyoth.com"];
@@ -114,9 +140,7 @@ export function loadConfig(env: Env): Config {
   return {
     allowedOrigins: list(env.ALLOWED_ORIGINS, DEFAULT_ORIGINS),
     linkAllowlist: list(env.LINK_ALLOWLIST, DEFAULT_LINKS).map((s) => s.toLowerCase()),
-    geminiModel: env.GEMINI_MODEL || "gemini-3.5-flash-lite",
-    groqModel: env.GROQ_MODEL || "openai/gpt-oss-120b",
-    providerOrder: parseOrder(env.PROVIDER_ORDER),
+    models: parseModels(env.MODELS),
     geminiKey: env.GEMINI_API_KEY ?? "",
     groqKey: env.GROQ_API_KEY ?? "",
     ipSalt: env.IP_SALT ?? "",
@@ -124,17 +148,18 @@ export function loadConfig(env: Env): Config {
     debug: env.JO_DEBUG === "true",
 
     limits: {
-      perIpWindow: int(env.PER_IP_WINDOW, 8),
-      perIpWindowSeconds: 600,
-      perIpDaily: int(env.PER_IP_DAILY, 30),
-      globalDailyModelCalls: int(env.DAILY_BUDGET, 1000),
+      burst: int(env.PER_IP_BURST, 15),
+      refillSeconds: int(env.PER_IP_REFILL_SECONDS, 6),
+      daily: int(env.PER_IP_DAILY, 150),
+      globalDailyModelCalls: int(env.DAILY_BUDGET, 2000),
     },
 
-    maxBodyBytes: 4096,
+    maxBodyBytes: 8192,
     maxOutputTokens: 180,
     firstTokenTimeoutMs: 2500,
-    fallbackFirstTokenTimeoutMs: 6000,
-    totalTimeoutMs: 20000,
+    // Gemini's free tier often takes 3–8s to start. When Groq is full, a slow answer beats "busy".
+    fallbackFirstTokenTimeoutMs: 10000,
+    totalTimeoutMs: 30000,
     cacheTtlSeconds: 7 * 24 * 60 * 60,
     statusMaxAgeSeconds: 30,
   };

@@ -6,6 +6,7 @@
 import { generateAnswer } from "../src/answer";
 import { cacheKey } from "../src/cache";
 import { loadConfig } from "../src/config";
+import { linksFromKnowledge } from "../src/guard/output";
 import { defaultProviders } from "../src/providers/router";
 import { buildSystemPrompt, buildUserMessage } from "../src/prompt";
 import { kvArgs, readDevVars, readJoMd, wrangler } from "./wrangler";
@@ -41,7 +42,7 @@ for (const question of SUGGESTED_QUESTIONS) {
     maxTokens: config.maxOutputTokens,
     timeoutsMs: [15000, 15000],
     totalTimeoutMs: 30000,
-    linkAllowlist: config.linkAllowlist,
+    linkAllowlist: [...config.linkAllowlist, ...linksFromKnowledge(joMd)],
     signal: new AbortController().signal,
     onText: async () => {},
   });

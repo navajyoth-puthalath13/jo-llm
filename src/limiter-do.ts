@@ -33,14 +33,14 @@ export class Limiter extends DurableObject<Env> {
     return spendBudget(this.store(), limits, Date.now());
   }
 
-  /** Deletes expired windows and previous days so storage stays tiny. */
+  /** Deletes idle buckets and previous days so storage stays tiny. */
   async alarm() {
     const now = Date.now();
     const today = dayKey(now);
     const stale: string[] = [];
-    for (const [key] of await this.ctx.storage.list({ prefix: "w:" })) {
-      const window = Number(key.split(":")[1]);
-      if (window < Math.floor(now / 1000 / 600) - 1) stale.push(key);
+    // A bucket idle for an hour has refilled completely, which is the same as having no entry.
+    for (const [key, at] of await this.ctx.storage.list<number>({ prefix: "b:" })) {
+      if (key.endsWith(":at") && now - at > 60 * 60 * 1000) stale.push(key, key.replace(/:at$/, ":t"));
     }
     for (const prefix of ["d:", "g:"]) {
       for (const [key] of await this.ctx.storage.list({ prefix })) {

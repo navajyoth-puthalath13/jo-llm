@@ -3,13 +3,33 @@ import { geminiProvider } from "./gemini";
 import { groqProvider } from "./groq";
 import { ProviderBlockedError, ProviderHttpError, type Provider, type ProviderRequest } from "./types";
 
-/** Providers in PROVIDER_ORDER, skipping any without a key. */
+/** The MODELS chain, skipping any provider without a key. */
 export function defaultProviders(config: Config): Provider[] {
-  const build: Record<ProviderName, () => Provider | null> = {
-    groq: () => (config.groqKey ? groqProvider(config.groqKey, config.groqModel) : null),
-    gemini: () => (config.geminiKey ? geminiProvider(config.geminiKey, config.geminiModel) : null),
+  const build: Record<ProviderName, (model: string) => Provider | null> = {
+    groq: (model) => (config.groqKey ? groqProvider(config.groqKey, model) : null),
+    gemini: (model) => (config.geminiKey ? geminiProvider(config.geminiKey, model) : null),
   };
-  return config.providerOrder.map((name) => build[name]()).filter((p): p is Provider => p !== null);
+  return config.models.map((m) => build[m.provider](m.model)).filter((p): p is Provider => p !== null);
+}
+
+/** First-word deadline per provider: Groq is fast, Gemini's free tier needs longer. */
+export function firstTokenTimeouts(providers: Provider[], config: Config): number[] {
+  return providers.map((p) =>
+    p.name.startsWith("gemini") ? config.fallbackFirstTokenTimeoutMs : config.firstTokenTimeoutMs,
+  );
+}
+
+// Models that just said "too many requests" are skipped for a while instead of costing every
+// visitor a failed round trip. Per isolate, which is enough: it's an optimisation, not a guard.
+const COOLDOWN_MS = 30_000; // without a Retry-After hint; with one, we wait what it says (capped)
+const cooledUntil = new Map<string, number>();
+
+export function isCooling(name: string, now = Date.now()): boolean {
+  return (cooledUntil.get(name) ?? 0) > now;
+}
+
+export function resetCooldowns() {
+  cooledUntil.clear();
 }
 
 export type RouteFailure = "busy" | "blocked";
@@ -42,9 +62,15 @@ export async function openStream(
   signal: AbortSignal,
   log: (provider: string, outcome: string) => void = () => {},
 ): Promise<OpenedStream> {
+  // If every model is cooling down, try them all anyway rather than failing without asking.
+  const allCooling = providers.every((p) => isCooling(p.name));
   for (let i = 0; i < providers.length; i++) {
     if (signal.aborted) break;
     const provider = providers[i]!;
+    if (!allCooling && isCooling(provider.name)) {
+      log(provider.name, "skipped_cooling");
+      continue;
+    }
     const timeoutMs = timeoutsMs[i] ?? timeoutsMs[timeoutsMs.length - 1] ?? 5000;
 
     const ctrl = new AbortController();
@@ -82,6 +108,10 @@ export async function openStream(
       if (err instanceof ProviderBlockedError) {
         ctrl.abort();
         throw new RouteError("blocked");
+      }
+      if (err instanceof ProviderHttpError && err.status === 429) {
+        const wait = err.retryAfterSeconds !== undefined ? Math.min(err.retryAfterSeconds * 1000, COOLDOWN_MS) : COOLDOWN_MS;
+        cooledUntil.set(provider.name, Date.now() + wait);
       }
       log(provider.name, err instanceof ProviderHttpError ? `http_${err.status}` : "error");
       ctrl.abort();

@@ -3,6 +3,7 @@
 // Usage: npm run test:live
 import { generateAnswer } from "../src/answer";
 import { loadConfig } from "../src/config";
+import { linksFromKnowledge } from "../src/guard/output";
 import { buildSystemPrompt, buildUserMessage } from "../src/prompt";
 import { defaultProviders } from "../src/providers/router";
 import type { Provider } from "../src/providers/types";
@@ -15,11 +16,13 @@ if (!all.length) {
   console.error("No provider keys. Put GEMINI_API_KEY and/or GROQ_API_KEY in .dev.vars.");
   process.exit(1);
 }
-const system = buildSystemPrompt(readJoMd());
+const joMd = readJoMd();
+const system = buildSystemPrompt(joMd);
 
 // Test each provider on its own: the fallback must be just as safe as the primary.
-const only = process.argv.find((a) => a.startsWith("--provider="))?.split("=")[1];
-const targets = all.filter((p) => !only || p.name === only);
+// --provider=groq (every Groq model) or --provider=groq:openai/gpt-oss-20b (one model).
+const only = process.argv.find((a) => a.startsWith("--provider="))?.slice("--provider=".length);
+const targets = all.filter((p) => !only || p.name === only || p.name.startsWith(`${only}:`));
 // Free tiers are tight (Gemini Flash-Lite: 15 requests/minute), so pace requests. Override with --delay=ms.
 const delayMs = Number(process.argv.find((a) => a.startsWith("--delay="))?.split("=")[1] ?? 4500);
 
@@ -35,7 +38,7 @@ for (const provider of targets) {
       maxTokens: config.maxOutputTokens,
       timeoutsMs: [15000],
       totalTimeoutMs: 30000,
-      linkAllowlist: config.linkAllowlist,
+      linkAllowlist: [...config.linkAllowlist, ...linksFromKnowledge(joMd)],
       signal: new AbortController().signal,
       onText: async () => {},
       log: (name, result) => console.log(`  (${name}: ${result})`),

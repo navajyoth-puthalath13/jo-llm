@@ -1,5 +1,5 @@
 import { readSseData } from "../sse";
-import { ProviderHttpError, type Provider, type ProviderRequest } from "./types";
+import { httpError, type Provider, type ProviderRequest } from "./types";
 
 const REASONING_HEADROOM = 600;
 const URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -10,7 +10,7 @@ interface GroqChunk {
 
 export function groqProvider(apiKey: string, model: string): Provider {
   return {
-    name: "groq",
+    name: `groq:${model}`,
     async *stream(req: ProviderRequest, signal: AbortSignal) {
       const res = await fetch(URL, {
         method: "POST",
@@ -32,7 +32,7 @@ export function groqProvider(apiKey: string, model: string): Provider {
           ],
         }),
       });
-      if (!res.ok || !res.body) throw new ProviderHttpError(res.status);
+      if (!res.ok || !res.body) throw httpError(res);
 
       for await (const data of readSseData(res.body)) {
         if (data === "[DONE]") return;

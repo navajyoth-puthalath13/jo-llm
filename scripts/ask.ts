@@ -65,7 +65,7 @@ for await (const data of readSseData(res.body!)) {
     currentEvent = "error";
     const lines: Record<string, string> = {
       offline: "I'm away from my desk right now — drop me an email?",
-      rate_limited: "Phew, lots of questions! Give me a minute.",
+      rate_limited: "Phew, lots of questions! Give me a few seconds.",
       busy: "I'm a little overloaded today — email me and I'll reply properly.",
       offtopic: "Ha, I only really know about me. Ask me about my work?",
       invalid: "I didn't catch that — try again?",

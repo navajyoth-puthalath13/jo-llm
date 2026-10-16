@@ -26,15 +26,15 @@ Headers: `Content-Type: application/json`. The browser adds `Origin` automatical
 ```json
 {
   "question": "1–300 chars, required",
-  "quote": "optional, the text the visitor selected, max 500 chars (truncate client-side)",
+  "quote": "optional, the text the visitor selected, max 1000 chars (truncate client-side)",
   "page": "optional, location.pathname, max 100 chars",
   "history": [{ "q": "…", "a": "…" }]
 }
 ```
 
-- `history` holds the last 3 exchanges at most, with each `q` and `a` truncated to 300 chars. The server never stores it.
+- `history` holds the last 6 exchanges at most, with each `q` truncated to 300 chars and each `a` to 600. The server never stores it.
 - Send no other fields. Unknown fields are rejected as `invalid`.
-- The whole body must stay under 4 KB.
+- The whole body must stay under 8 KB.
 
 The response is `text/event-stream` (Server-Sent Events) with exactly these events:
 
@@ -55,12 +55,12 @@ Rules the client must follow:
 ### In-character lines for error codes
 
 - `offline`: "I'm away from my desk right now — drop me an email?"
-- `rate_limited`: "Phew, lots of questions! Give me a minute."
+- `rate_limited`: "Phew, lots of questions! Give me a few seconds."
 - `busy`: "I'm a little overloaded today — email me and I'll reply properly."
 - `offtopic`: "Ha, I only really know about me. Ask me about my work?"
 - `invalid` or any network error: "I didn't catch that — try again?"
 
-Limits visitors may hit (the server enforces them; just show the line): 8 questions per 10 minutes and 30 per day per visitor, plus a burst limit of 4 per 10 seconds.
+Limits (the server enforces them; just show the line): each visitor can ask 15 questions in a quick burst, then one every 6 seconds, up to 150 a day. A real conversation never meets them, so `rate_limited` should be rare and short-lived.
 
 ### Reference SSE client (`lib/joLlm.ts`)
 
@@ -75,7 +75,7 @@ export const JO_LLM_ENABLED = process.env.NEXT_PUBLIC_JO_LLM_ENABLED === "true" 
 
 export const JO_ERROR_LINES: Record<JoErrorCode, string> = {
   offline: "I'm away from my desk right now — drop me an email?",
-  rate_limited: "Phew, lots of questions! Give me a minute.",
+  rate_limited: "Phew, lots of questions! Give me a few seconds.",
   busy: "I'm a little overloaded today — email me and I'll reply properly.",
   offtopic: "Ha, I only really know about me. Ask me about my work?",
   invalid: "I didn't catch that — try again?",
@@ -106,10 +106,10 @@ export async function askJo(
   const clip = (s: string, n: number) => s.slice(0, n);
   const payload = {
     question: clip(body.question.trim(), 300),
-    ...(body.quote ? { quote: clip(body.quote, 500) } : {}),
+    ...(body.quote ? { quote: clip(body.quote, 1000) } : {}),
     ...(body.page ? { page: clip(body.page, 100) } : {}),
     ...(body.history?.length
-      ? { history: body.history.slice(-3).map((h) => ({ q: clip(h.q, 300), a: clip(h.a, 300) })) }
+      ? { history: body.history.slice(-6).map((h) => ({ q: clip(h.q, 300), a: clip(h.a, 600) })) }
       : {}),
   };
   let finished = false;
@@ -151,7 +151,7 @@ export async function askJo(
 - **Hero:** pressing `/` or `⌘/` (`Ctrl /` on Windows) opens a Figma-style cursor-chat pill at the mouse position, with the placeholder "Ask me anything…" and styled like Figma's cursor chat. While the visitor types, Jo (`components/Hero/JoCharacter.tsx`) switches to a listening pose: head up, reusing sprite frame 2 ("looks up at the visitor"). Enter sends. The pill stays briefly showing the question, then fades. Jo's answer streams word by word into a speech bubble above his head. Escape closes everything and aborts the request.
 - **Other pages** (case studies, about, blog): pressing `/` brings a standing Jo into a fixed bottom corner, then the same pill and bubble flow. He leaves a few seconds after the bubble closes. The standing illustration will be supplied later as a sprite, so use a clearly marked placeholder until then.
 - **Text selection anywhere:** a small "Ask Jo" button appears above the selection. Clicking it brings Jo in, and he answers about that passage directly. Send it as `quote`, with the question "explain this".
-- **Follow-ups:** pressing `/` while an answer is showing opens a new pill as a follow-up. Send the last 3 exchanges as `history`.
+- **Follow-ups:** pressing `/` while an answer is showing opens a new pill as a follow-up. Send the last 6 exchanges as `history`.
 - Ignore `/` while focus is in an input, textarea or contenteditable. Call `preventDefault` so Firefox quick find doesn't open.
 - Show a subtle "press / to ask me" hint near Jo in the hero. On touch devices, tapping Jo opens the pill. Tapping already replays the greeting today, so decide how the two coexist (for example, the first tap greets and opens the pill).
 - Fit in with the existing custom cursor (`components/Cursor/Cursor.tsx`) and the intro cursor tour (`IntroCursor.tsx`, the `jo:react` event). The pill must not fight them.
@@ -193,7 +193,7 @@ export async function askJo(
 3. Quick checks:
    - "How can I contact you?" streams an answer.
    - "What is the capital of France?" shows the `offtopic` line.
-   - Asking 9 times quickly shows the `rate_limited` line.
+   - Asking 16 questions within a few seconds shows the `rate_limited` line, and asking again 6 seconds later works.
    - Selecting a paragraph and clicking "Ask Jo" sends it as `quote`.
 
 ## Done when

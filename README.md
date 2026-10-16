@@ -5,7 +5,7 @@ A tiny question-answering Worker for navajyoth.com. Visitors ask the illustrated
 This repo is only the backend. The portfolio calls it over `fetch`.
 
 - **Runtime:** Cloudflare Workers (free plan), Hono, Zod
-- **Models:** Groq `openai/gpt-oss-120b` (tried first, starts in ~0.5 s) and Gemini `gemini-3.5-flash-lite` (backup; its free tier takes 2–8 s to start). Both are free tier. The order (`PROVIDER_ORDER`) and model names are vars in `wrangler.toml`. Groq's free tier no longer includes Llama chat models.
+- **Models:** a chain of free-tier models, each with its own quota: Groq `openai/gpt-oss-120b`, then Groq `openai/gpt-oss-20b` (both start in ~0.5 s), then Gemini `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite` (2–8 s to start). A model that returns 429 is skipped for 30 s. The chain is the `MODELS` var in `wrangler.toml`. Groq's free tier no longer includes Llama chat models.
 - **State:** KV holds the kill switch and the answer cache. One SQLite Durable Object holds the rate-limit counters. A Rate Limiting binding acts as a burst filter.
 
 ## API
@@ -16,18 +16,18 @@ Returns `{ "enabled": boolean }` with `Cache-Control: public, max-age=30`.
 
 ### `POST /ask`
 
-Send it with `Content-Type: application/json` and an allowed `Origin`. The body must be under 4 KB, and unknown fields are rejected.
+Send it with `Content-Type: application/json` and an allowed `Origin`. The body must be under 8 KB, and unknown fields are rejected.
 
 ```json
 {
   "question": "1–300 chars",
-  "quote": "optional, selected text, truncated to 500",
+  "quote": "optional, selected text, truncated to 1000",
   "page": "optional pathname, ≤100 chars",
   "history": [{ "q": "…", "a": "…" }]
 }
 ```
 
-`history` keeps only the last 3 exchanges, and each field is truncated to 300 characters. The server never stores it.
+`history` keeps only the last 6 exchanges; each `q` is truncated to 300 characters and each `a` to 600. The server never stores it.
 
 The response is `text/event-stream` and uses only these events:
 
@@ -125,7 +125,13 @@ The cache key includes a hash of the whole prompt (jo.md plus the rules), so old
 
 - **Origins:** only allowlisted origins get through. `/ask` without an `Origin` is rejected with 403 before any work is done. `ALLOWED_ORIGINS` entries are exact origins, or contain `*` wildcards that match letters, digits and hyphens only (never a dot), used to let the portfolio's Vercel previews in: `https://portfolio-*-navajyoth-puthalath13s-projects.vercel.app`.
 - **Kill switch:** checked first. Then the body is size-capped, Zod validates it strictly, and control, zero-width and bidi characters are stripped.
-- **Rate limits:** a per-IP burst filter (4 per 10 s), then 8 per 10 min and 30 per day per IP (set with `PER_IP_WINDOW` and `PER_IP_DAILY` in `wrangler.toml`; currently raised to 30 and 100 for testing). On top of that sits a global daily budget of model calls, which returns `busy` once spent. IPs are hashed with a secret salt, and raw IPs are never stored or logged.
+- **Rate limits stop scripts, not conversations.**
+  - Each visitor has a bucket of 15 questions that refills one every 6 seconds. A conversation never runs dry, and nobody is locked out for minutes; at worst a script waits 6 seconds per question.
+  - A daily fairness cap of 150 per visitor stops one person from spending everyone's free quota.
+  - A flood filter (10 requests per 10 s) keeps floods away from the counters.
+  - A global daily budget of 2,000 model calls protects the free tiers and returns `busy` once spent. Cached answers don't count against it.
+  - All of these are vars in `wrangler.toml` (`PER_IP_BURST`, `PER_IP_REFILL_SECONDS`, `PER_IP_DAILY`, `DAILY_BUDGET`).
+  - IPs are hashed with a secret salt, and raw IPs are never stored or logged.
 - **Prompt injection:**
   - Visitor text goes only inside `<visitor_question>`, `<selected_text>`, `<page_path>` and `<previous_exchanges>`.
   - `<` and `>` in visitor text are escaped, so it can't close those tags.
