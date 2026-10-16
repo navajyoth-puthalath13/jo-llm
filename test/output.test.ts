@@ -70,3 +70,15 @@ describe("visible length cap", () => {
     expect(sent.length).toBeGreaterThan(60);
   });
 });
+
+describe("links from jo.md", () => {
+  it("allows every link and email written in the knowledge file", async () => {
+    const { linksFromKnowledge } = await import("../src/guard/output");
+    const md = "Email: mailto:Me@Example.com\nLinkedIn: https://www.linkedin.com/in/me, X: https://x.com/me.\nSite: https://navajyoth.com/";
+    const allow = linksFromKnowledge(md);
+    expect(allow).toEqual(expect.arrayContaining(["www.linkedin.com/in/me", "x.com/me", "navajyoth.com", "mailto:me@example.com"]));
+    expect(sanitizeText("Reach me at me@example.com or https://x.com/me, not https://x.com/someoneelse", allow)).toBe(
+      "Reach me at me@example.com or https://x.com/me, not",
+    );
+  });
+});

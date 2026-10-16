@@ -10,6 +10,6 @@ ALLOWED_ORIGINS=http://localhost:3000
 # Print every pipeline step in the `npm run dev` terminal. Local only.
 JO_DEBUG=true
 
-# Looser per-IP limits for local testing (production: 8 per 10 min, 30 per day).
-PER_IP_WINDOW=200
+# Looser per-IP limits for local testing (production: bucket of 15, refills every 6s, 150 a day).
+PER_IP_BURST=200
 PER_IP_DAILY=1000

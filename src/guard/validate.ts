@@ -16,7 +16,7 @@ export function cleanText(input: string): string {
 const truncated = (max: number) =>
   z
     .string()
-    .max(4096)
+    .max(8192)
     .transform((s) => cleanText(s).slice(0, max));
 
 export const AskSchema = z
@@ -26,16 +26,17 @@ export const AskSchema = z
       .max(4096)
       .transform(cleanText)
       .pipe(z.string().min(1).max(300)),
-    quote: truncated(500).optional(),
+    quote: truncated(1000).optional(),
     page: z
       .string()
       .max(100)
       .regex(/^\/[A-Za-z0-9\-._~%/]*$/)
       .optional(),
     history: z
-      .array(z.object({ q: truncated(300), a: truncated(300) }).strict())
-      .max(10)
-      .transform((h) => h.slice(-3))
+      // Jo's answers are capped at ~720 characters, so 600 keeps nearly all of each one.
+      .array(z.object({ q: truncated(300), a: truncated(600) }).strict())
+      .max(20)
+      .transform((h) => h.slice(-6))
       .optional(),
   })
   .strict();

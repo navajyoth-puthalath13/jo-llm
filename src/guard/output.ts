@@ -13,6 +13,20 @@ export function containsLeak(text: string): boolean {
 const URL_RE = /\b(?:mailto:[^\s<>()]+|https?:\/\/[^\s<>()]+|www\.[^\s<>()]+|[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app|ai|co|me|xyz|in|design|so|sh|ly|gg|tv|page|site)\b(?:\/[^\s<>()]*)?)/gi;
 const EMAIL_RE = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi;
 
+/**
+ * Every link and email written in jo.md is allowed automatically: jo.md is the trusted source,
+ * so Jo can always share what it says, without keeping LINK_ALLOWLIST in sync by hand.
+ */
+export function linksFromKnowledge(md: string): string[] {
+  const out = new Set<string>();
+  for (const m of md.matchAll(/https?:\/\/[^\s<>()"'`]+/gi)) {
+    const link = m[0].replace(/[.,;:!?'"\]]+$/, "").replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+    if (link) out.add(link);
+  }
+  for (const m of md.matchAll(EMAIL_RE)) out.add(`mailto:${m[0].toLowerCase()}`);
+  return [...out];
+}
+
 function isAllowedLink(raw: string, allowlist: string[]): boolean {
   const trimmed = raw.replace(/[.,;:!?'"]+$/, "").toLowerCase();
   const target = trimmed.replace(/^https?:\/\//, "");
@@ -30,7 +44,9 @@ function filterLinks(text: string, allowlist: string[]): string {
     if (whole.slice(Math.max(0, offset - 7), offset).toLowerCase() === "mailto:") return email;
     return isAllowedLink(`mailto:${email}`, allowlist) || isAllowedLink(email, allowlist) ? email : "";
   });
-  out = out.replace(URL_RE, (url) => {
+  out = out.replace(URL_RE, (url, offset: number, whole: string) => {
+    // The domain half of an email that survived the email pass is not a separate link.
+    if (whole.charAt(offset - 1) === "@") return url;
     if (url.includes("@") && !url.toLowerCase().startsWith("mailto:")) return url; // handled above
     if (url.toLowerCase().startsWith("mailto:")) {
       return isAllowedLink(url, allowlist) ? url.replace(/^mailto:/i, "") : "";

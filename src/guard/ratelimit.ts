@@ -4,13 +4,13 @@
 // a day, so KV counters would be both leaky and exhausted by ~300 questions. Counters live in one
 // SQLite-backed Durable Object instead (free plan, strongly consistent). The Workers Rate Limiting
 // binding sits in front as a cheap burst filter so floods never reach the Durable Object.
+//
+// Per-person limiting is a token bucket, not a fixed window: a visitor starts with `burst`
+// questions and gets one back every `refillSeconds`. A conversation never runs dry; a script
+// is slowed to one question per refill interval, and nobody is ever locked out for minutes.
 
-export interface Limits {
-  perIpWindow: number;
-  perIpWindowSeconds: number;
-  perIpDaily: number;
-  globalDailyModelCalls: number;
-}
+import type { Limits } from "../config";
+export type { Limits };
 
 export type HitResult = "ok" | "rate_limited";
 
@@ -29,13 +29,16 @@ export interface CounterStore {
 
 export const dayKey = (now: number) => new Date(now).toISOString().slice(0, 10);
 
-/** Fixed-window counting. Increments only when the request is allowed. */
+/** Token bucket plus daily fairness cap. Consumes only when the request is allowed. */
 export async function countHit(store: CounterStore, ipHash: string, limits: Limits, now: number): Promise<HitResult> {
-  const windowKey = `w:${Math.floor(now / 1000 / limits.perIpWindowSeconds)}:${ipHash}`;
+  const tokensKey = `b:${ipHash}:t`;
+  const atKey = `b:${ipHash}:at`;
   const dailyKey = `d:${dayKey(now)}:${ipHash}`;
-  const [w, d] = await Promise.all([store.get(windowKey), store.get(dailyKey)]);
-  if ((w ?? 0) >= limits.perIpWindow || (d ?? 0) >= limits.perIpDaily) return "rate_limited";
-  await Promise.all([store.put(windowKey, (w ?? 0) + 1), store.put(dailyKey, (d ?? 0) + 1)]);
+  const [storedTokens, storedAt, d] = await Promise.all([store.get(tokensKey), store.get(atKey), store.get(dailyKey)]);
+  const elapsed = Math.max(0, now - (storedAt ?? now)) / 1000;
+  const tokens = Math.min(limits.burst, (storedTokens ?? limits.burst) + elapsed / limits.refillSeconds);
+  if (tokens < 1 || (d ?? 0) >= limits.daily) return "rate_limited";
+  await Promise.all([store.put(tokensKey, tokens - 1), store.put(atKey, now), store.put(dailyKey, (d ?? 0) + 1)]);
   return "ok";
 }
 

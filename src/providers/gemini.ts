@@ -1,5 +1,5 @@
 import { readSseData } from "../sse";
-import { ProviderBlockedError, ProviderHttpError, type Provider, type ProviderRequest } from "./types";
+import { ProviderBlockedError, httpError, type Provider, type ProviderRequest } from "./types";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -22,7 +22,7 @@ interface GeminiChunk {
 
 export function geminiProvider(apiKey: string, model: string): Provider {
   return {
-    name: "gemini",
+    name: `gemini:${model}`,
     async *stream(req: ProviderRequest, signal: AbortSignal) {
       const res = await fetch(`${BASE}/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
         method: "POST",
@@ -35,7 +35,7 @@ export function geminiProvider(apiKey: string, model: string): Provider {
           safetySettings: SAFETY_SETTINGS,
         }),
       });
-      if (!res.ok || !res.body) throw new ProviderHttpError(res.status);
+      if (!res.ok || !res.body) throw httpError(res);
 
       for await (const data of readSseData(res.body)) {
         let chunk: GeminiChunk;

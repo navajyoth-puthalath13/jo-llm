@@ -47,17 +47,73 @@ describe("provider router", () => {
   }, 10000);
 });
 
-describe("provider order", () => {
-  it("defaults to groq first and honours PROVIDER_ORDER", async () => {
+describe("model chain", () => {
+  it("defaults to Groq 120b → Groq 20b → Gemini, and honours MODELS", async () => {
     const { loadConfig } = await import("../src/config");
     const { defaultProviders } = await import("../src/providers/router");
     const keys = { GEMINI_API_KEY: "g", GROQ_API_KEY: "q" };
-    expect(defaultProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual(["groq", "gemini"]);
-    expect(defaultProviders(loadConfig({ ...keys, PROVIDER_ORDER: "gemini,groq" } as never)).map((p) => p.name)).toEqual([
-      "gemini",
-      "groq",
+    expect(defaultProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual([
+      "groq:openai/gpt-oss-120b",
+      "groq:openai/gpt-oss-20b",
+      "gemini:gemini-3.5-flash-lite",
+      "gemini:gemini-3.1-flash-lite",
     ]);
-    expect(defaultProviders(loadConfig({ GEMINI_API_KEY: "g" } as never)).map((p) => p.name)).toEqual(["gemini"]);
-    expect(loadConfig({ PROVIDER_ORDER: "nonsense" } as never).providerOrder).toEqual(["groq", "gemini"]);
+    expect(
+      defaultProviders(loadConfig({ ...keys, MODELS: "gemini:gemini-3.6-flash, groq:openai/gpt-oss-20b" } as never)).map((p) => p.name),
+    ).toEqual(["gemini:gemini-3.6-flash", "groq:openai/gpt-oss-20b"]);
+    // Providers without a key are skipped; nonsense falls back to the defaults.
+    expect(defaultProviders(loadConfig({ GEMINI_API_KEY: "g" } as never)).every((p) => p.name.startsWith("gemini:"))).toBe(true);
+    expect(loadConfig({ MODELS: "nonsense,openai:gpt" } as never).models).toHaveLength(4);
+  });
+
+  it("gives Groq the short first-word deadline and Gemini the long one", async () => {
+    const { loadConfig } = await import("../src/config");
+    const { defaultProviders, firstTokenTimeouts } = await import("../src/providers/router");
+    const config = loadConfig({ GEMINI_API_KEY: "g", GROQ_API_KEY: "q" } as never);
+    expect(firstTokenTimeouts(defaultProviders(config), config)).toEqual([2500, 2500, 10000, 10000]);
+  });
+});
+
+describe("429 cooldown", () => {
+  it("skips a model for a while after it says too many requests", async () => {
+    const { ProviderHttpError } = await import("../src/providers/types");
+    const { resetCooldowns } = await import("../src/providers/router");
+    resetCooldowns();
+    const limited: Provider & { calls: number } = {
+      name: "limited",
+      calls: 0,
+      // eslint-disable-next-line require-yield
+      async *stream() {
+        this.calls++;
+        throw new ProviderHttpError(429);
+      },
+    };
+    const backup = mockProvider(["ok"], { name: "backup" });
+    const outcomes: string[] = [];
+    const log = (name: string, result: string) => outcomes.push(`${name}:${result}`);
+    await openStream([limited, backup], req, [1000, 1000], new AbortController().signal, log);
+    await openStream([limited, backup], req, [1000, 1000], new AbortController().signal, log);
+    expect(limited.calls).toBe(1);
+    expect(outcomes).toEqual(["limited:http_429", "limited:skipped_cooling"]);
+    resetCooldowns();
+  });
+});
+
+describe("Retry-After", () => {
+  it("skips a 429'd model only as long as the provider asked", async () => {
+    const { ProviderHttpError } = await import("../src/providers/types");
+    const { isCooling, resetCooldowns } = await import("../src/providers/router");
+    resetCooldowns();
+    const limited: Provider = {
+      name: "brief",
+      // eslint-disable-next-line require-yield
+      async *stream() {
+        throw new ProviderHttpError(429, 2);
+      },
+    };
+    await openStream([limited, mockProvider(["ok"])], req, [1000, 1000], new AbortController().signal);
+    expect(isCooling("brief", Date.now() + 1_000)).toBe(true);
+    expect(isCooling("brief", Date.now() + 2_500)).toBe(false);
+    resetCooldowns();
   });
 });

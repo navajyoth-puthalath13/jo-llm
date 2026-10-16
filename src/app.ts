@@ -5,9 +5,10 @@ import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
 import { isAllowedOrigin, loadConfig, type Config, type Env } from "./config";
 import { isEnabled } from "./guard/killswitch";
 import { hashIp, type Limiter } from "./guard/ratelimit";
+import { linksFromKnowledge } from "./guard/output";
 import { parseAsk, readCappedBody } from "./guard/validate";
 import { buildSystemPrompt, buildUserMessage } from "./prompt";
-import { defaultProviders } from "./providers/router";
+import { defaultProviders, firstTokenTimeouts } from "./providers/router";
 import type { Provider } from "./providers/types";
 import { createEventStream, errorResponse, SSE_HEADERS, type ErrorCode } from "./sse";
 
@@ -53,6 +54,7 @@ function waitUntil(c: Context<AppEnv>, p: Promise<unknown>) {
 export function createApp(deps: AppDeps) {
   const joMd = deps.joMd ?? joMdDefault;
   const systemPrompt = buildSystemPrompt(joMd);
+  const knowledgeLinks = linksFromKnowledge(joMd);
   const app = new Hono<AppEnv>();
 
   // Security headers on every response.
@@ -179,9 +181,9 @@ export function createApp(deps: AppDeps) {
         system: systemPrompt,
         user: buildUserMessage(input),
         maxTokens: config.maxOutputTokens,
-        timeoutsMs: [config.firstTokenTimeoutMs, config.fallbackFirstTokenTimeoutMs],
+        timeoutsMs: firstTokenTimeouts(providers, config),
         totalTimeoutMs: config.totalTimeoutMs,
-        linkAllowlist: config.linkAllowlist,
+        linkAllowlist: [...config.linkAllowlist, ...knowledgeLinks],
         signal: clientGone.signal,
         onText: async (t) => {
           firstTokenMs ??= Date.now() - started;

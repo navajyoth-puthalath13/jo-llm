@@ -26,9 +26,9 @@ describe("request validation", () => {
     });
   }
 
-  it("rejects bodies over 4 KB", async () => {
+  it("rejects bodies over 8 KB", async () => {
     const ctx = setup();
-    const res = await ask(ctx, { question: "hi", quote: "x".repeat(5000) });
+    const res = await ask(ctx, { question: "hi", quote: "x".repeat(9000) });
     expect(errorCode(await readEvents(res))).toBe("invalid");
   });
 
@@ -42,12 +42,13 @@ describe("request validation", () => {
     expect(cleanText("  hel​lo\u0000 \n\n wor‮ld﻿  ")).toBe("hello world");
   });
 
-  it("truncates history and quote, and keeps only the last 3 exchanges", () => {
-    const history = Array.from({ length: 5 }, (_, i) => ({ q: `q${i} ${"x".repeat(400)}`, a: `a${i}` }));
-    const input = parseAsk(JSON.stringify({ question: "hi", quote: "y".repeat(800), history }));
-    expect(input?.quote).toHaveLength(500);
-    expect(input?.history).toHaveLength(3);
+  it("truncates history and quote, and keeps only the last 6 exchanges", () => {
+    const history = Array.from({ length: 8 }, (_, i) => ({ q: `q${i} ${"x".repeat(400)}`, a: `a${i} ${"z".repeat(700)}` }));
+    const input = parseAsk(JSON.stringify({ question: "hi", quote: "y".repeat(1500), history: history.slice(0, 8) }));
+    expect(input?.quote).toHaveLength(1000);
+    expect(input?.history).toHaveLength(6);
     expect(input?.history?.[0]?.q.startsWith("q2")).toBe(true);
     expect(input?.history?.[0]?.q).toHaveLength(300);
+    expect(input?.history?.[0]?.a).toHaveLength(600);
   });
 });

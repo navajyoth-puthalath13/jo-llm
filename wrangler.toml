@@ -16,20 +16,21 @@ fallthrough = false
 # last entry lets the portfolio's Vercel previews (branch and per-deploy URLs)
 # call Jo; that suffix is this Vercel account's own scope.
 ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com,https://portfolio-*-navajyoth-puthalath13s-projects.vercel.app"
-# Links Jo may mention. Host + optional path prefix, or mailto:<address>.
-# TODO: add your LinkedIn, X and public email, e.g. linkedin.com/in/<you>,x.com/<you>,mailto:<you>@<domain>
+# Extra links Jo may mention, beyond the ones written in content/jo.md (those are allowed
+# automatically). Host + optional path prefix, or mailto:<address>.
 LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13"
-# Which model to try first. Groq starts in ~0.5s; Gemini's free tier takes 2–8s. Flip to "gemini,groq" if that changes.
-PROVIDER_ORDER = "groq,gemini"
-GEMINI_MODEL = "gemini-3.5-flash-lite"
-GROQ_MODEL = "openai/gpt-oss-120b"
-# Per-person (per IP) question limits. TESTING VALUES: raised from the production defaults
-# (8 per 10 minutes, 30 per day) while the portfolio integration is being tested.
-# Before launch, delete these two lines (or set them back to "8" and "30") and redeploy.
-PER_IP_WINDOW = "30"
-PER_IP_DAILY = "100"
-# Global model calls per day (UTC). Keep at or below 1000: also bounds KV cache writes on the free plan.
-DAILY_BUDGET = "1000"
+# Models to try in order, as provider:model. Each has its own free quota, so the chain adds capacity:
+# Groq models start in ~0.5s (8,000 tokens/min each ≈ 1.7 questions/min); Gemini's take 2–8s (15/min each).
+# A model that returns 429 is skipped for 30 seconds.
+MODELS = "groq:openai/gpt-oss-120b,groq:openai/gpt-oss-20b,gemini:gemini-3.5-flash-lite,gemini:gemini-3.1-flash-lite"
+# Per-person limits stop scripts, not conversations: a bucket of PER_IP_BURST questions that refills
+# one every PER_IP_REFILL_SECONDS, plus a daily fairness cap so one visitor can't spend everyone's quota.
+PER_IP_BURST = "15"
+PER_IP_REFILL_SECONDS = "6"
+PER_IP_DAILY = "150"
+# Global model calls per day (UTC), across all visitors. Cached answers don't count.
+# Above ~1000, KV cache writes may hit the free plan's daily write limit; caching then just stops for the day.
+DAILY_BUDGET = "2000"
 # Emergency override. "true" turns Jo off regardless of KV (needs a deploy or a dashboard edit).
 JO_FORCE_OFF = "false"
 
@@ -47,11 +48,12 @@ class_name = "Limiter"
 tag = "v1"
 new_sqlite_classes = ["Limiter"]
 
-# Burst filter in front of the Durable Object: 4 questions per 10 seconds per IP hash.
+# Flood filter in front of the Durable Object: 10 requests per 10 seconds per IP hash.
+# No person types that fast; it only exists to keep floods away from the counters.
 [[ratelimits]]
 name = "BURST"
 namespace_id = "1001"
-simple = { limit = 4, period = 10 }
+simple = { limit = 10, period = 10 }
 
 [observability]
 enabled = true
