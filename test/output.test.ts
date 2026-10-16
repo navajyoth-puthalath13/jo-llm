@@ -47,3 +47,26 @@ describe("output sanitizer", () => {
     expect(pieces.join("")).toBe(clean(text));
   });
 });
+
+describe("visible length cap", () => {
+  it("stops a runaway answer at about maxTokens * 4 characters", async () => {
+    const { generateAnswer } = await import("../src/answer");
+    const { mockProvider } = await import("./helpers");
+    const words = Array.from({ length: 400 }, () => "word ");
+    let sent = "";
+    const outcome = await generateAnswer({
+      providers: [mockProvider(words)],
+      system: "s",
+      user: "u",
+      maxTokens: 20,
+      timeoutsMs: [1000],
+      totalTimeoutMs: 5000,
+      linkAllowlist: [],
+      signal: new AbortController().signal,
+      onText: async (t) => void (sent += t),
+    });
+    expect(outcome.ok).toBe(true);
+    expect(sent.length).toBeLessThanOrEqual(80);
+    expect(sent.length).toBeGreaterThan(60);
+  });
+});

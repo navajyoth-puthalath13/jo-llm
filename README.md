@@ -5,7 +5,7 @@ A tiny question-answering Worker for navajyoth.com. Visitors ask the illustrated
 This repo is only the backend. The portfolio calls it over `fetch`.
 
 - **Runtime:** Cloudflare Workers (free plan), Hono, Zod
-- **Models:** Gemini Flash-Lite (primary), Groq gpt-oss-120b (fallback; Groq's free tier no longer includes Llama chat models). Both are free tier. Model names are vars in `wrangler.toml`.
+- **Models:** Groq `openai/gpt-oss-120b` (tried first, starts in ~0.5 s) and Gemini `gemini-3.5-flash-lite` (backup; its free tier takes 2–8 s to start). Both are free tier. The order (`PROVIDER_ORDER`) and model names are vars in `wrangler.toml`. Groq's free tier no longer includes Llama chat models.
 - **State:** KV holds the kill switch and the answer cache. One SQLite Durable Object holds the rate-limit counters. A Rate Limiting binding acts as a burst filter.
 
 ## API
@@ -58,12 +58,33 @@ Get the keys here:
 
 Generate the IP salt with `openssl rand -hex 32`.
 
-### Local dev
+### Run it locally and watch what happens
 
 ```bash
-npx wrangler kv key put --binding=JO_KV jo:enabled true --local
-npm run dev            # http://localhost:8787
+npx wrangler kv key put --binding=JO_KV jo:enabled true --local   # local switch, separate from production
+npm run dev                                   # terminal 1: server on http://localhost:8787
+npm run ask -- "How did you get into design?" # terminal 2: watch the answer stream in
+npm run ask -- "explain this" --quote "text selected on the page"
+npm run ask -- "hi" --url https://jo-llm.navajyothputalath13.workers.dev   # the deployed Worker
 ```
+
+With `JO_DEBUG=true` in `.dev.vars`, terminal 1 prints every step of each request:
+
+```
+[jo +   3ms] 1 origin   ✓ http://localhost:3000 is allowed
+[jo +  14ms] 2 switch   ✓ kill switch is on
+[jo +  17ms] 3 validate ✓ question "Where can I see your code?"
+[jo +  26ms] 4 limits   ✓ under the per-IP limits
+[jo +  28ms] 5 cache    miss: will ask a model
+[jo +  29ms] 6 budget   ✓ global daily budget has room
+[jo +  29ms] 7 prompt   jo.md + rules as system prompt; visitor text wrapped in tags: …
+[jo +  29ms] 8 model    trying groq → gemini (2500ms to first word)
+[jo + 520ms] 8 model    groq answered first: "You"
+[jo + 530ms] 9 output   raw model text: "…"
+[jo + 530ms] 9 output   sent to browser:  "…"
+```
+
+`JO_DEBUG` is for local use only. Never set it in production, because it prints questions.
 
 ## Deploy
 
@@ -128,7 +149,7 @@ The cache key includes a hash of jo.md, so old answers stop being served right a
 
 - **KV:** 1,000 writes a day. Only cache misses on plain questions write, and the global budget caps those. Keep `DAILY_BUDGET` at 1000 or below.
 - **Durable Objects:** the free plan allows 100k requests a day. Each question uses about 2 requests.
-- **Gemini and Groq:** free-tier RPM and RPD limits are per project or account. When the primary returns 429, requests fall through to Groq.
+- **Gemini and Groq:** free-tier RPM and RPD limits are per project or account. When the first provider errors or returns 429, requests fall through to the other one. Gemini's free tier on this key allows 15 requests a minute.
 
 ## Tests
 

@@ -6,3 +6,10 @@ IP_SALT=a-long-random-string-from-openssl-rand-hex-32
 
 # Dev only: vars here override wrangler.toml [vars] locally.
 ALLOWED_ORIGINS=http://localhost:3000
+
+# Print every pipeline step in the `npm run dev` terminal. Local only.
+JO_DEBUG=true
+
+# Looser per-IP limits for local testing (production: 8 per 10 min, 30 per day).
+PER_IP_WINDOW=200
+PER_IP_DAILY=1000

@@ -1,14 +1,15 @@
-import type { Config } from "../config";
+import type { Config, ProviderName } from "../config";
 import { geminiProvider } from "./gemini";
 import { groqProvider } from "./groq";
 import { ProviderBlockedError, ProviderHttpError, type Provider, type ProviderRequest } from "./types";
 
-/** Primary → fallback, skipping any provider without a key. */
+/** Providers in PROVIDER_ORDER, skipping any without a key. */
 export function defaultProviders(config: Config): Provider[] {
-  const list: Provider[] = [];
-  if (config.geminiKey) list.push(geminiProvider(config.geminiKey, config.geminiModel));
-  if (config.groqKey) list.push(groqProvider(config.groqKey, config.groqModel));
-  return list;
+  const build: Record<ProviderName, () => Provider | null> = {
+    groq: () => (config.groqKey ? groqProvider(config.groqKey, config.groqModel) : null),
+    gemini: () => (config.geminiKey ? geminiProvider(config.geminiKey, config.geminiModel) : null),
+  };
+  return config.providerOrder.map((name) => build[name]()).filter((p): p is Provider => p !== null);
 }
 
 export type RouteFailure = "busy" | "blocked";

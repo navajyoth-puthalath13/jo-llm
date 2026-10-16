@@ -3,13 +3,14 @@ import { ProviderBlockedError, ProviderHttpError, type Provider, type ProviderRe
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
-// Stricter than the default thresholds. Jo should never produce anything close to these.
+// Google's default threshold. BLOCK_LOW_AND_ABOVE was tested and misfires on harmless output
+// (it blocked a bare "[[OFFTOPIC]]"), which turned real answers into declines.
 const SAFETY_SETTINGS = [
   "HARM_CATEGORY_HARASSMENT",
   "HARM_CATEGORY_HATE_SPEECH",
   "HARM_CATEGORY_SEXUALLY_EXPLICIT",
   "HARM_CATEGORY_DANGEROUS_CONTENT",
-].map((category) => ({ category, threshold: "BLOCK_LOW_AND_ABOVE" }));
+].map((category) => ({ category, threshold: "BLOCK_MEDIUM_AND_ABOVE" }));
 
 interface GeminiChunk {
   promptFeedback?: { blockReason?: string };

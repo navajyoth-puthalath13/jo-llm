@@ -34,6 +34,14 @@ const STATUS_FOR: Record<ErrorCode, number> = {
   offtopic: 200,
 };
 
+/** Local-only step trace, enabled with JO_DEBUG=true in .dev.vars. */
+function tracer(config: Config) {
+  const t0 = Date.now();
+  return (step: string, detail: string) => {
+    if (config.debug) console.log(`[jo +${String(Date.now() - t0).padStart(4)}ms] ${step.padEnd(10)} ${detail}`);
+  };
+}
+
 function waitUntil(c: Context<AppEnv>, p: Promise<unknown>) {
   try {
     c.executionCtx.waitUntil(p);
@@ -89,12 +97,17 @@ export function createApp(deps: AppDeps) {
   app.post("/ask", async (c) => {
     const config = c.get("config");
     const started = Date.now();
+    const trace = tracer(config);
     const fail = (code: ErrorCode, extra: Record<string, string | number | boolean | undefined> = {}) => {
+      trace("✗ stop", `→ error "${code}"${extra.reason ? ` (${extra.reason})` : ""}`);
       logEvent({ outcome: code, ms: Date.now() - started, ...extra });
       return errorResponse(code, STATUS_FOR[code]);
     };
 
+    trace("─────────", "new question");
+    trace("1 origin", `✓ ${c.get("origin")} is allowed`);
     if (!(await isEnabled(c.env.JO_KV, config))) return fail("offline");
+    trace("2 switch", "✓ kill switch is on");
 
     const contentType = c.req.header("Content-Type") ?? "";
     if (!contentType.toLowerCase().startsWith("application/json")) return fail("invalid");
@@ -102,6 +115,10 @@ export function createApp(deps: AppDeps) {
     if (raw === null) return fail("invalid");
     const input = parseAsk(raw);
     if (!input) return fail("invalid");
+    trace(
+      "3 validate",
+      `✓ question ${JSON.stringify(input.question.slice(0, 80))}${input.quote ? `, quote ${input.quote.length} chars` : ""}${input.history ? `, ${input.history.length} past exchanges` : ""}`,
+    );
 
     if (!config.ipSalt) return fail("busy"); // misconfigured: refuse rather than key on raw IPs
     const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
@@ -111,12 +128,15 @@ export function createApp(deps: AppDeps) {
     } catch {
       return fail("busy");
     }
+    trace("4 limits", "✓ under the per-IP limits");
 
     const cacheable = !input.quote && !input.history?.length;
     const key = cacheable ? await cacheKey(input.question, joMd) : null;
+    if (!key) trace("5 cache", "skipped: questions with a quote or history are never cached");
 
     if (key) {
       const hit = await getCached(c.env.JO_KV, key);
+      trace("5 cache", hit ? "✓ cache hit: streaming saved answer, no model call" : "miss: will ask a model");
       if (hit) {
         const { readable, writer } = createEventStream();
         waitUntil(
@@ -145,6 +165,9 @@ export function createApp(deps: AppDeps) {
     } catch {
       return fail("busy");
     }
+    trace("6 budget", "✓ global daily budget has room");
+    trace("7 prompt", `jo.md + rules as system prompt; visitor text wrapped in tags:\n${buildUserMessage(input)}`);
+    trace("8 model", `trying ${providers.map((p) => p.name).join(" → ")} (${config.firstTokenTimeoutMs}ms to first word)`);
 
     const { readable, writer } = createEventStream();
     const clientGone = new AbortController();
@@ -169,7 +192,11 @@ export function createApp(deps: AppDeps) {
             throw err;
           }
         },
-        log: (provider, result) => logEvent({ outcome: "provider_fallthrough", provider, result }),
+        log: (provider, result) => {
+          trace("8 model", `✗ ${provider} failed (${result}), falling through`);
+          logEvent({ outcome: "provider_fallthrough", provider, result });
+        },
+        trace,
       }).catch(() => ({ ok: false as const, code: "busy" as const, partial: false, provider: undefined }));
 
       try {
@@ -184,6 +211,7 @@ export function createApp(deps: AppDeps) {
       } finally {
         await writer.close();
       }
+      trace("done", outcome.ok ? `✓ answered by ${outcome.provider}, first word at ${firstTokenMs}ms` : `→ error "${outcome.code}"`);
       logEvent({
         outcome: outcome.ok ? "ok" : outcome.code,
         provider: outcome.provider,

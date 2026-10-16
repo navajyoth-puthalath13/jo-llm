@@ -46,3 +46,18 @@ describe("provider router", () => {
     expect(answerText(events)).toBe("From the fallback.");
   }, 10000);
 });
+
+describe("provider order", () => {
+  it("defaults to groq first and honours PROVIDER_ORDER", async () => {
+    const { loadConfig } = await import("../src/config");
+    const { defaultProviders } = await import("../src/providers/router");
+    const keys = { GEMINI_API_KEY: "g", GROQ_API_KEY: "q" };
+    expect(defaultProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual(["groq", "gemini"]);
+    expect(defaultProviders(loadConfig({ ...keys, PROVIDER_ORDER: "gemini,groq" } as never)).map((p) => p.name)).toEqual([
+      "gemini",
+      "groq",
+    ]);
+    expect(defaultProviders(loadConfig({ GEMINI_API_KEY: "g" } as never)).map((p) => p.name)).toEqual(["gemini"]);
+    expect(loadConfig({ PROVIDER_ORDER: "nonsense" } as never).providerOrder).toEqual(["groq", "gemini"]);
+  });
+});

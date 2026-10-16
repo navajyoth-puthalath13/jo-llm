@@ -1,6 +1,7 @@
 import { readSseData } from "../sse";
 import { ProviderHttpError, type Provider, type ProviderRequest } from "./types";
 
+const REASONING_HEADROOM = 600;
 const URL = "https://api.groq.com/openai/v1/chat/completions";
 
 interface GroqChunk {
@@ -19,7 +20,9 @@ export function groqProvider(apiKey: string, model: string): Provider {
           model,
           stream: true,
           temperature: 0.4,
-          max_completion_tokens: req.maxTokens,
+          // gpt-oss reasoning counts toward this limit (measured 120–180 tokens at "low"), so leave
+          // headroom; the visible answer is capped separately in answer.ts.
+          max_completion_tokens: req.maxTokens + REASONING_HEADROOM,
           // gpt-oss models reason before answering: keep it brief and never stream it.
           reasoning_effort: "low",
           reasoning_format: "hidden",

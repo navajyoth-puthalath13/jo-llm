@@ -18,6 +18,8 @@ export interface AnswerOptions {
   /** Receives sanitized text as soon as it is safe to show. Throwing stops generation. */
   onText: (text: string) => Promise<void>;
   log?: (provider: string, outcome: string) => void;
+  /** Debug-only step trace (local dev). */
+  trace?: (step: string, detail: string) => void;
 }
 
 export type AnswerOutcome =
@@ -47,15 +49,24 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
       return { ok: false, code, partial: false };
     }
     provider = opened.provider;
+    o.trace?.("8 model", `${provider} answered first: ${JSON.stringify(opened.first)}`);
 
     const sanitizer = createStreamSanitizer(o.linkAllowlist);
     let gate: SentinelState = "pending";
     let held = "";
 
+    // ~4 characters per token: the visible answer never exceeds maxTokens, whatever the provider does.
+    const maxChars = o.maxTokens * 4;
+    let capped = false;
     const emit = async (text: string) => {
-      if (!text) return;
+      if (!text || capped) return;
+      if (emitted.length + text.length > maxChars) {
+        text = text.slice(0, Math.max(0, maxChars - emitted.length)).replace(/\S*$/, "");
+        capped = true;
+        o.trace?.("9 output", "visible length cap reached, stopping");
+      }
       emitted += text;
-      await o.onText(text);
+      if (text) await o.onText(text);
     };
 
     /** Returns false when the answer must be replaced with a decline. */
@@ -77,14 +88,25 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
 
     const decline = () => ({ ok: false as const, code: "offtopic" as const, provider, partial: emitted.length > 0 });
 
-    if (!(await take(opened.first))) return decline();
+    const t = o.trace ?? (() => {});
+    const declineWith = (why: string) => {
+      t("9 output", `raw model text: ${JSON.stringify(sanitizer.raw)}`);
+      t("9 output", `✗ replaced with decline (${why})`);
+      return decline();
+    };
+
+    if (!(await take(opened.first))) return declineWith(sanitizer.raw.includes("OFFTOPIC") ? "model said [[OFFTOPIC]]" : "leak marker");
     try {
       while (true) {
         const r = await opened.rest.next();
         if (r.done) break;
+        if (capped) {
+          ctrl.abort();
+          break;
+        }
         if (!(await take(r.value))) {
           ctrl.abort();
-          return decline();
+          return declineWith(sanitizer.raw.includes("OFFTOPIC") ? "model said [[OFFTOPIC]]" : "leak marker");
         }
       }
     } catch {
@@ -94,11 +116,13 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
 
     if (gate === "pending") {
       // Stream ended while still looking like a possible sentinel.
-      if (sanitizer.raw.trim()) return decline();
+      if (sanitizer.raw.trim()) return declineWith("model said [[OFFTOPIC]]");
       return { ok: false, code: "busy", provider, partial: false };
     }
     await emit(held + sanitizer.flush());
-    if (containsLeak(sanitizer.raw)) return decline();
+    if (containsLeak(sanitizer.raw)) return declineWith("leak marker");
+    t("9 output", `raw model text: ${JSON.stringify(sanitizer.raw)}`);
+    t("9 output", `sent to browser:  ${JSON.stringify(emitted.trim())}`);
     if (!emitted.trim()) return { ok: false, code: "busy", provider, partial: false };
     return { ok: true, text: emitted.trim(), provider };
   } finally {

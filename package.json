@@ -11,7 +11,8 @@
     "test:live": "tsx scripts/live-check.ts",
     "typecheck": "tsc --noEmit",
     "precompute": "tsx scripts/precompute.ts",
-    "jo": "tsx scripts/jo.ts"
+    "jo": "tsx scripts/jo.ts",
+    "ask": "tsx scripts/ask.ts"
   },
   "dependencies": {
     "hono": "^4.13.13",

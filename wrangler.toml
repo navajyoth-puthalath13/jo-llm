@@ -16,6 +16,8 @@ ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com"
 # Links Jo may mention. Host + optional path prefix, or mailto:<address>.
 # TODO: add your LinkedIn, X and public email, e.g. linkedin.com/in/<you>,x.com/<you>,mailto:<you>@<domain>
 LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13"
+# Which model to try first. Groq starts in ~0.5s; Gemini's free tier takes 2–8s. Flip to "gemini,groq" if that changes.
+PROVIDER_ORDER = "groq,gemini"
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 GROQ_MODEL = "openai/gpt-oss-120b"
 # Global model calls per day (UTC). Keep at or below 1000: also bounds KV cache writes on the free plan.
