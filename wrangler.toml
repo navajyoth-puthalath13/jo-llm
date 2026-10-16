@@ -23,6 +23,11 @@ LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath
 PROVIDER_ORDER = "groq,gemini"
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 GROQ_MODEL = "openai/gpt-oss-120b"
+# Per-person (per IP) question limits. TESTING VALUES: raised from the production defaults
+# (8 per 10 minutes, 30 per day) while the portfolio integration is being tested.
+# Before launch, delete these two lines (or set them back to "8" and "30") and redeploy.
+PER_IP_WINDOW = "30"
+PER_IP_DAILY = "100"
 # Global model calls per day (UTC). Keep at or below 1000: also bounds KV cache writes on the free plan.
 DAILY_BUDGET = "1000"
 # Emergency override. "true" turns Jo off regardless of KV (needs a deploy or a dashboard edit).
