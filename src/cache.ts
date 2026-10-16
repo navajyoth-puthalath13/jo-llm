@@ -1,5 +1,5 @@
-// Answer cache in KV. Keys combine the normalised question with a hash of jo.md, so editing
-// jo.md invalidates every cached answer automatically.
+// Answer cache in KV. Keys combine the normalised question with a hash of the full system prompt
+// (jo.md + rules), so editing either one invalidates every cached answer automatically.
 //
 // Note: the KV free plan allows 1,000 writes a day. Writes only happen on cache misses for
 // plain questions, and the global model budget caps those, but keep DAILY_BUDGET at or below it.
@@ -20,18 +20,18 @@ async function sha256Hex(s: string): Promise<string> {
 
 const contentHashes = new Map<string, Promise<string>>();
 
-/** Memoised per isolate: jo.md is constant for the life of a deployment. */
-export function contentHash(joMd: string): Promise<string> {
-  let h = contentHashes.get(joMd);
+/** Memoised per isolate: the system prompt is constant for the life of a deployment. */
+export function contentHash(systemPrompt: string): Promise<string> {
+  let h = contentHashes.get(systemPrompt);
   if (!h) {
-    h = sha256Hex(joMd).then((x) => x.slice(0, 16));
-    contentHashes.set(joMd, h);
+    h = sha256Hex(systemPrompt).then((x) => x.slice(0, 16));
+    contentHashes.set(systemPrompt, h);
   }
   return h;
 }
 
-export async function cacheKey(question: string, joMd: string): Promise<string> {
-  const [content, q] = await Promise.all([contentHash(joMd), sha256Hex(normalizeQuestion(question))]);
+export async function cacheKey(question: string, systemPrompt: string): Promise<string> {
+  const [content, q] = await Promise.all([contentHash(systemPrompt), sha256Hex(normalizeQuestion(question))]);
   return `ans:${content}:${q.slice(0, 32)}`;
 }
 

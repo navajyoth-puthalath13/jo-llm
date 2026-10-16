@@ -2,7 +2,7 @@
 // so the most common questions cost no model quota and return instantly.
 // Usage: npm run precompute            (uses keys from .dev.vars)
 //        npm run precompute -- --dry   (print answers, write nothing)
-// Re-run after every jo.md edit + deploy: the cache key includes jo.md's hash.
+// Re-run after every jo.md or prompt edit + deploy: the cache key includes the prompt's hash.
 import { generateAnswer } from "../src/answer";
 import { cacheKey } from "../src/cache";
 import { loadConfig } from "../src/config";
@@ -52,7 +52,7 @@ for (const question of SUGGESTED_QUESTIONS) {
   }
   console.log(`✓ ${question}\n  ${outcome.text}  (${outcome.provider})`);
   if (!dry) {
-    const key = await cacheKey(question, joMd);
+    const key = await cacheKey(question, system);
     wrangler(kvArgs("put", key, outcome.text, `--expiration-ttl=${config.cacheTtlSeconds}`), { capture: true });
   }
 }

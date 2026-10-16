@@ -119,7 +119,7 @@ Emergency override: set `JO_FORCE_OFF = "true"`, either in the dashboard (Worker
 
 Edit `content/jo.md`, deploy, then run `npm run precompute`.
 
-The cache key includes a hash of jo.md, so old answers stop being served right away. They expire from KV after 7 days. Keep `<!-- DRAFT: review -->` markers until you've checked each section. Add any link Jo may mention to `LINK_ALLOWLIST`; the output filter strips every other URL and email.
+The cache key includes a hash of the whole prompt (jo.md plus the rules), so old answers stop being served right away. They expire from KV after 7 days. Keep `<!-- DRAFT: review -->` markers until you've checked each section. Add any link Jo may mention to `LINK_ALLOWLIST`; the output filter strips every other URL and email.
 
 ## Security model
 
