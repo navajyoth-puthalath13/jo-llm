@@ -54,8 +54,7 @@ describe("model chain", () => {
     const keys = { GEMINI_API_KEY: "g", GROQ_API_KEY: "q" };
     expect(defaultProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual([
       "groq:openai/gpt-oss-120b",
-      "gemini:gemini-3.5-flash-lite",
-      "gemini:gemini-3.1-flash-lite",
+      "gemini:gemini-3.6-flash",
     ]);
     expect(utilityProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual([
       "groq:openai/gpt-oss-20b",
@@ -66,7 +65,7 @@ describe("model chain", () => {
     ).toEqual(["gemini:gemini-3.6-flash", "groq:openai/gpt-oss-20b"]);
     // Providers without a key are skipped; nonsense falls back to the defaults.
     expect(defaultProviders(loadConfig({ GEMINI_API_KEY: "g" } as never)).every((p) => p.name.startsWith("gemini:"))).toBe(true);
-    expect(loadConfig({ MODELS: "nonsense,openai:gpt" } as never).models).toHaveLength(3);
+    expect(loadConfig({ MODELS: "nonsense,openai:gpt" } as never).models).toHaveLength(2);
     expect(loadConfig({} as never).answerReasoning).toBe("medium");
   });
 
@@ -74,7 +73,7 @@ describe("model chain", () => {
     const { loadConfig } = await import("../src/config");
     const { defaultProviders, firstTokenTimeouts } = await import("../src/providers/router");
     const config = loadConfig({ GEMINI_API_KEY: "g", GROQ_API_KEY: "q" } as never);
-    expect(firstTokenTimeouts(defaultProviders(config), config)).toEqual([2500, 10000, 10000]);
+    expect(firstTokenTimeouts(defaultProviders(config), config)).toEqual([2500, 10000]);
   });
 });
 

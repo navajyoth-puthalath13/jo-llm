@@ -3,7 +3,8 @@
 //   Gemini: https://ai.google.dev/gemini-api/docs/pricing (free tier) and https://aistudio.google.com/rate-limit
 //   Groq:   https://console.groq.com/docs/models and https://console.groq.com/settings/limits
 // Checked 2026-10-16 (free tier, this account):
-//   groq   openai/gpt-oss-120b, openai/gpt-oss-20b: 8,000 tokens/min and 1,000 requests/day EACH, ~0.5s to first word
+//   groq   openai/gpt-oss-120b, openai/gpt-oss-20b: 8,000 tokens/min, 200,000 tokens/day and
+//          1,000 requests/day EACH, ~0.5s to first word. The daily token cap is the real ceiling.
 //   gemini gemini-3.5-flash-lite, gemini-3.1-flash-lite: 15 requests/min each, 2–8s to first word
 // A Jo question used to cost ~4,500 tokens with the whole knowledge file in every prompt; with
 // routing it is ~2,000-2,500, so one Groq model serves roughly 3 questions a minute.
@@ -90,12 +91,13 @@ const int = (v: string | undefined, fallback: number): number => {
 };
 
 // Fast Groq models first, slower Gemini models as extra capacity.
-// Answers: the strongest free model first. gpt-oss-20b drifted from the facts more, so it only does
-// the small structured calls now. Gemini is slower to start but has its own quota.
+// Answers: the strongest free models only. Groq gpt-oss-120b first (fast; 200,000 tokens a day on
+// the free tier, about 65 questions). Then Gemini 3.6 Flash with low thinking: ~2.5s to the first
+// word but grounded. Flash-Lite and gpt-oss-20b are not used for answers: in testing both invented
+// facts that weren't in the knowledge files. They only do the small structured calls.
 export const DEFAULT_MODELS: ModelChoice[] = [
   { provider: "groq", model: "openai/gpt-oss-120b" },
-  { provider: "gemini", model: "gemini-3.5-flash-lite" },
-  { provider: "gemini", model: "gemini-3.1-flash-lite" },
+  { provider: "gemini", model: "gemini-3.6-flash" },
 ];
 
 // Router and button picker: small, fast, structured output (strict json_schema on Groq).

@@ -89,7 +89,9 @@ for (const [i, c] of cases.entries()) {
   );
   if (!pass || verbose) {
     const answer = r.outcome.ok ? r.outcome.text : `(${r.outcome.code})`;
-    console.log(`      route: ${r.route.source} ${r.route.intent} ${JSON.stringify(r.route.files)} | buttons: ${JSON.stringify(r.actions)} (${r.buttonSource ?? "-"})`);
+    console.log(
+      `      route: ${r.route.source} ${r.route.intent} ${JSON.stringify(r.route.files)} | answered by: ${r.outcome.ok ? r.outcome.provider : "-"} | buttons: ${JSON.stringify(r.actions)} (${r.buttonSource ?? "-"})`,
+    );
     console.log(`      answer: ${answer}`);
     for (const p of v.problems) console.log(`      ✗ ${p}`);
   }

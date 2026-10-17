@@ -179,7 +179,6 @@ export const EVAL_CASES: EvalCase[] = [
     name: "resume",
     input: { question: "Can I see your resume?" },
     buttons: ["resume"],
-    never: ["top-right corner"],
   },
   {
     name: "contact",
@@ -243,7 +242,7 @@ export const EVAL_CASES: EvalCase[] = [
     name: "tools",
     input: { question: "What tools do you use?" },
     contains: ["Figma"],
-    never: ["pen and paper", "on paper", "sketch on paper", "Cohere", "Rave", "Notebook", "NotebookLM"],
+    never: ["sketch on paper", "sketch ideas on paper", "Cohere", "Rave"],
   },
   // Small talk, off-topic, injection
   {

@@ -29,7 +29,15 @@ function toGeminiSchema(schema: unknown): unknown {
   return out;
 }
 
-export function geminiProvider(apiKey: string, model: string): Provider {
+export interface GeminiOptions {
+  /** Gemini 3 "thinking" level for answers. Thinking tokens count toward maxOutputTokens, so the
+   *  request gets extra room; the visible answer is still capped in answer.ts. */
+  thinkingLevel?: "low" | "medium" | "high";
+}
+
+const THINKING_HEADROOM = 1024;
+
+export function geminiProvider(apiKey: string, model: string, opts: GeminiOptions = {}): Provider {
   return {
     name: `gemini:${model}`,
     async *stream(req: ProviderRequest, signal: AbortSignal) {
@@ -40,7 +48,9 @@ export function geminiProvider(apiKey: string, model: string): Provider {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: req.system }] },
           contents: [{ role: "user", parts: [{ text: req.user }] }],
-          generationConfig: { maxOutputTokens: req.maxTokens, temperature: 0.4 },
+          generationConfig: opts.thinkingLevel
+            ? { maxOutputTokens: req.maxTokens + THINKING_HEADROOM, temperature: 0.3, thinkingConfig: { thinkingLevel: opts.thinkingLevel } }
+            : { maxOutputTokens: req.maxTokens, temperature: 0.4 },
           safetySettings: SAFETY_SETTINGS,
         }),
       });

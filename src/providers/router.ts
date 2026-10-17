@@ -3,22 +3,25 @@ import { geminiProvider } from "./gemini";
 import { groqProvider, type ReasoningEffort } from "./groq";
 import { ProviderBlockedError, ProviderHttpError, type Provider, type ProviderRequest } from "./types";
 
-function build(config: Config, models: ModelChoice[], reasoning: ReasoningEffort): Provider[] {
+function build(config: Config, models: ModelChoice[], reasoning: ReasoningEffort, forAnswers: boolean): Provider[] {
   const make: Record<ProviderName, (model: string) => Provider | null> = {
     groq: (model) => (config.groqKey ? groqProvider(config.groqKey, model, reasoning) : null),
-    gemini: (model) => (config.geminiKey ? geminiProvider(config.geminiKey, model) : null),
+    // Answers on full Gemini Flash models think a little first ("low"): in testing that kept them
+    // grounded, while Flash-Lite invented facts about things not in the files even at temperature 0.
+    gemini: (model) =>
+      config.geminiKey ? geminiProvider(config.geminiKey, model, forAnswers && !model.includes("lite") ? { thinkingLevel: "low" } : {}) : null,
   };
   return models.map((m) => make[m.provider](m.model)).filter((p): p is Provider => p !== null);
 }
 
 /** The answer chain (MODELS), skipping any provider without a key. */
 export function defaultProviders(config: Config): Provider[] {
-  return build(config, config.models, config.answerReasoning);
+  return build(config, config.models, config.answerReasoning, true);
 }
 
 /** The router and button-picker chain (UTILITY_MODELS). */
 export function utilityProviders(config: Config): Provider[] {
-  return build(config, config.utilityModels, "low");
+  return build(config, config.utilityModels, "low", false);
 }
 
 /** First-word deadline per provider: Groq is fast, Gemini's free tier needs longer. */

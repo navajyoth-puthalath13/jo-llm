@@ -169,3 +169,19 @@ describe("routing over the API", () => {
     expect(ctx.limiter.store.get(`g:${day}`)).toBe(1);
   });
 });
+
+describe("off-topic safety net", () => {
+  it("doesn't let the router refuse a question that matches Navajyoth's files", async () => {
+    const p = mockJsonProvider(JSON.stringify({ offtopic: true, intent: "smalltalk", files: [] }));
+    const r = await route([p], "Do you mentor people or run Friends of Figma?");
+    expect(r.offtopic).toBe(false);
+    expect(r.files).toContain("outside-work");
+  });
+
+  it("still declines when nothing about Navajyoth matches", async () => {
+    const p = mockJsonProvider(JSON.stringify({ offtopic: true, intent: "about", files: [] }));
+    for (const q of ["What is the capital of France?", "Write me a poem about the sea", "What is React?"]) {
+      expect((await route([p], q)).offtopic, q).toBe(true);
+    }
+  });
+});

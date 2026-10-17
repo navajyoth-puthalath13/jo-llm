@@ -13,7 +13,7 @@ always: true
 - GitHub: https://github.com/navajyoth-puthalath13
 - Writing: I write on Substack at https://navajyothputalath13.substack.com/
 - Resume: https://drive.google.com/file/d/19pVWr0N1-GL_lnKO11iLGKijxkJuT8qR/view?usp=drive_link
-- TODO: Is the resume still linked in the top-right corner of the portfolio homepage? The old answer said so. If yes, add it back as a fact.
+- My resume is also linked in the top-right corner of my portfolio homepage.
 - Website: https://navajyoth.com
 - For opportunities, email me or message me on LinkedIn.
 - Only share these public links and the project pages in the project files.

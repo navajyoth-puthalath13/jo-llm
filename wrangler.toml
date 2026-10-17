@@ -20,10 +20,11 @@ ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com,https://portf
 # automatically). Host + optional path prefix, or mailto:<address>.
 # Also covers every external button in content/actions.ts (test/actions.test.ts checks).
 LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13,x.com/putalath,www.linkedin.com/in/navajyothp,mailto:navajyothputalath13@gmail.com,drive.google.com/file/d/19pVWr0N1-GL_lnKO11iLGKijxkJuT8qR,system-three-rouge.vercel.app,navajyothputalath13.substack.com"
-# Answer models, in order, as provider:model. Each has its own free quota. gpt-oss-20b is not in the
-# answer chain any more (it drifted from the facts more); it does the small router/button calls.
-# A model that returns 429 is skipped for its Retry-After (max 30s).
-MODELS = "groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite,gemini:gemini-3.1-flash-lite"
+# Answer models, in order, as provider:model. Each has its own free quota. Groq gpt-oss-120b has a
+# 200,000-token daily cap (about 65 questions); then Gemini 3.6 Flash (low thinking, ~2.5s to the
+# first word, grounded). Flash-Lite and gpt-oss-20b are NOT used for answers: they invented facts in
+# testing. A model that returns 429 is skipped for its Retry-After (max 30s).
+MODELS = "groq:openai/gpt-oss-120b,gemini:gemini-3.6-flash"
 # Router and button picker: small structured calls with strict JSON output.
 UTILITY_MODELS = "groq:openai/gpt-oss-20b,gemini:gemini-3.5-flash-lite"
 # gpt-oss reasoning effort for answers: low | medium | high.
