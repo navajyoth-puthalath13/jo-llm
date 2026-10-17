@@ -10,7 +10,8 @@
 // - Editing a label or href takes effect immediately, cached answers included. Adding or removing
 //   an entry, or changing `when`, invalidates cached answers.
 //
-// LinkedIn is left out on purpose: the portfolio still has a placeholder URL. Add it once it's real.
+// There's no /work page on the portfolio (only /work/<slug>), so "work" points at the homepage
+// section /#work. Change it if a /work page is added.
 
 export type ActionKind = "internal" | "external" | "mailto";
 
@@ -24,17 +25,32 @@ export interface JoAction {
 }
 
 const entries: JoAction[] = [
+  // How to reach me
   {
     id: "email",
     label: "Email me",
     href: "mailto:navajyothputalath13@gmail.com",
     kind: "mailto",
-    when: "visitor wants to contact me, talk about an opportunity, or my reply points them to email",
+    when: "visitor wants to contact me, hire me, talk about an opportunity, or my reply points them to email",
+  },
+  {
+    id: "linkedin",
+    label: "Connect on LinkedIn",
+    href: "https://www.linkedin.com/in/navajyothp/",
+    kind: "external",
+    when: "visitor asks how to contact or connect with me, or about LinkedIn",
+  },
+  {
+    id: "x",
+    label: "Find me on X",
+    href: "https://x.com/putalath",
+    kind: "external",
+    when: "visitor asks how to contact or follow me, or about X or Twitter",
   },
   {
     id: "resume",
     label: "Open my resume",
-    href: "https://drive.google.com/file/d/1ljdZrg_4GmGbNfOpaENBb_9KSCI5wcXf/view?usp=sharing",
+    href: "https://drive.google.com/file/d/19pVWr0N1-GL_lnKO11iLGKijxkJuT8qR/view?usp=drive_link",
     kind: "external",
     when: "visitor asks for my resume or CV",
   },
@@ -46,46 +62,26 @@ const entries: JoAction[] = [
     when: "visitor asks about my code, GitHub or open-source work",
   },
   {
-    id: "x",
-    label: "Find me on X",
-    href: "https://x.com/putalath",
+    id: "substack",
+    label: "Read my Substack",
+    href: "https://navajyothputalath13.substack.com/",
     kind: "external",
-    when: "visitor asks about my X or Twitter, or where to follow me",
+    when: "visitor asks about my writing, blog, articles or newsletter",
   },
+  // Projects
   {
-    id: "work",
-    label: "See my work",
-    href: "/#work",
-    kind: "internal",
-    when: "visitor wants to see my work or projects in general",
-  },
-  {
-    id: "photography",
-    label: "See my photos",
-    href: "/#photography",
-    kind: "internal",
-    when: "visitor asks about my photography",
-  },
-  {
-    id: "experiments",
-    label: "See my experiments",
-    href: "/experiments",
-    kind: "internal",
-    when: "visitor asks about my experiments, side projects or small tools",
-  },
-  {
-    id: "about",
-    label: "More about me",
-    href: "/about",
-    kind: "internal",
-    when: "visitor wants my background or story in more depth",
+    id: "system",
+    label: "Open System registry",
+    href: "https://system-three-rouge.vercel.app/",
+    kind: "external",
+    when: "visitor asks about System, my design system, its components or registry, or what I'm working on right now",
   },
   {
     id: "care-scribe",
     label: "Read CARE Scribe",
     href: "/work/care-scribe",
     kind: "internal",
-    when: "visitor asks about CARE Scribe, Open Healthcare Network or my healthcare work, or my best project",
+    when: "visitor asks about CARE Scribe, Open Healthcare Network, my healthcare work, or my best case study",
   },
   {
     id: "a11y-agent",
@@ -93,6 +89,35 @@ const entries: JoAction[] = [
     href: "/work/a11y-agent",
     kind: "internal",
     when: "visitor asks about Guideline Agent, accessibility in pull requests or my accessibility work",
+  },
+  // Sections of the site
+  {
+    id: "work",
+    label: "See my work",
+    href: "/#work",
+    kind: "internal",
+    when: "visitor wants to see my work, projects or case studies in general",
+  },
+  {
+    id: "experiments",
+    label: "See my side projects",
+    href: "/experiments",
+    kind: "internal",
+    when: "visitor asks about side projects, experiments or small tools",
+  },
+  {
+    id: "photography",
+    label: "See my photos",
+    href: "/#photography",
+    kind: "internal",
+    when: "visitor asks about my photography or photos",
+  },
+  {
+    id: "about",
+    label: "More about me",
+    href: "/about",
+    kind: "internal",
+    when: "visitor wants my background or story in more depth",
   },
 ];
 

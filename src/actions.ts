@@ -3,9 +3,10 @@
 
 import { ACTIONS, type ActionKind, type JoAction } from "../content/actions";
 
-export const MAX_ACTIONS = 2;
+// Usually one button; up to three when the visitor asked for several places (e.g. ways to contact me).
+export const MAX_ACTIONS = 3;
 /** Extra output tokens so the tag fits without eating into the visible answer. */
-export const ACTION_TAG_TOKENS = 15;
+export const ACTION_TAG_TOKENS = 20;
 
 /** What the browser receives. Never contains `when`. */
 export interface ResolvedAction {

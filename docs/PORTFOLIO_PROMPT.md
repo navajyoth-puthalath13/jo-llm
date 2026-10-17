@@ -41,7 +41,7 @@ The response is `text/event-stream` (Server-Sent Events) with exactly these even
 | event   | data                                   | meaning                                 |
 | ------- | -------------------------------------- | --------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                | append to the bubble                    |
-| `actions` | `{ "actions": [{ "id": "resume", "label": "Open my resume", "href": "https://…", "kind": "external" }] }` | 0–2 buttons to show under the answer (optional) |
+| `actions` | `{ "actions": [{ "id": "resume", "label": "Open my resume", "href": "https://…", "kind": "external" }] }` | 0–3 buttons to show under the answer (optional; usually 1) |
 | `done`  | `{ "cached": boolean }`                | the answer is complete                  |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` | replace the bubble text with the matching line below |
 
@@ -180,6 +180,10 @@ export async function askJo(
   - a tail pointing at Jo's head
 - States: **thinking** (a small "…" between Enter and the first token), **streaming**, and **done**.
 - After streaming finishes, keep it on screen for about 3 s plus 1 s per line, or until the next `/`. It may overlap page content.
+- **When the answer has buttons, don't auto-hide it.** The visitor needs time to read and click. It stays until the visitor clicks a button, clicks or taps anywhere outside the bubble, presses Escape, or presses `/` for a follow-up.
+- **Click outside closes it**, with or without buttons: a pointerdown outside the bubble and its buttons (and outside the pill) dismisses the bubble, and Jo leaves on non-hero pages. Ignore the click that opened it. Don't close while the visitor is selecting text inside the bubble.
+- While the pointer is over the bubble, or keyboard focus is inside it, pause any auto-hide timer.
+- Clicking an `internal` button closes the bubble and navigates. `external` and `mailto` buttons leave it open, since the visitor comes back to the same page.
 - Put `aria-live="polite"` on the answer text.
 - Respect `prefers-reduced-motion`: no slide-ins or bounces, and text can appear without per-word animation.
 - The mouth animation will be added later as sprite frames. Expose an `isTalking` state from the streaming hook: true while tokens arrive, false on `done` or `error`. That way the character can switch to talking frames later without touching the networking code.

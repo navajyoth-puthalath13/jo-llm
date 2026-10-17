@@ -59,7 +59,8 @@ describe("parsing the tag", () => {
 
   it("drops unknown ids, extra ids, malformed tags and injected hrefs", () => {
     expect(parseActionTag("[[ACT:resume,hack-the-planet]]")).toEqual(["resume"]);
-    expect(parseActionTag("[[ACT:email,resume,github]]")).toEqual(["email", "resume"]);
+    expect(parseActionTag("[[ACT:email,linkedin,x]]")).toEqual(["email", "linkedin", "x"]);
+    expect(parseActionTag("[[ACT:email,linkedin,x,resume]]")).toEqual(["email", "linkedin", "x"]);
     expect(parseActionTag("[[ACT:resume")).toEqual([]);
     expect(parseActionTag("[[act resume]]")).toEqual([]);
     expect(parseActionTag("[[ACT:resume]] and more text")).toEqual([]);
@@ -116,7 +117,7 @@ describe("actions over the API", () => {
     const spy = { ...provider, stream: (req: { maxTokens: number }, signal: AbortSignal) => ((maxTokens = req.maxTokens), provider.stream(req as never, signal)) };
     const ctx = setup({ providers: [spy as never] });
     await (await ask(ctx, { question: "hi" })).text();
-    expect(maxTokens).toBe(180 + 15);
+    expect(maxTokens).toBe(180 + 20);
   });
 
   it("declines and errors never carry actions", async () => {
