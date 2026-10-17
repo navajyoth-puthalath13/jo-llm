@@ -4,7 +4,8 @@
 
 import { z } from "zod";
 import { ACTIONS } from "../content/actions";
-import { MAX_ACTIONS } from "./actions";
+// Buttons for most answers; only contact questions may use the full MAX_ACTIONS (4).
+const USUAL_MAX = 3;
 import type { Knowledge } from "./knowledge";
 import { escapeData } from "./prompt";
 import type { Provider } from "./providers/types";
@@ -25,7 +26,7 @@ function buttonSystem(): string {
   const catalog = ACTIONS.map((a) => `- ${a.id} — ${a.when}`).join("\n");
   return `You choose buttons to show under an answer on Navajyoth's portfolio site. Buttons take the visitor somewhere related to what they asked and what Jo answered. Return JSON only.
 
-Pick 0 to ${MAX_ACTIONS} ids from this list, most relevant first. Only ids from the list exist:
+Pick 0 to ${USUAL_MAX} ids from this list, most relevant first. Only ids from the list exist:
 ${catalog}
 
 - Pick a button when the answer talks about a specific project, a part of the site, his writing, his resume or how to reach him.
@@ -47,7 +48,7 @@ function buttonUser(question: string, answer: string, page: string | undefined, 
 const buttonSchema = {
   type: "object",
   properties: {
-    actions: { type: "array", items: { type: "string", enum: ACTIONS.map((a) => a.id) }, maxItems: MAX_ACTIONS },
+    actions: { type: "array", items: { type: "string", enum: ACTIONS.map((a) => a.id) }, maxItems: USUAL_MAX },
   },
   required: ["actions"],
   additionalProperties: false,
@@ -95,7 +96,9 @@ export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candi
   const { intent } = ctx;
   if (intent === "smalltalk") return [];
   if (intent === "private") return mentionsEmail(ctx.answer) ? ["email"] : [];
-  if (intent === "contact") return [...CONTACT];
+  // Ways to reach me: email, LinkedIn and X, plus Substack when the answer talks about it.
+  // Never GitHub here; code questions get it through their own intent.
+  if (intent === "contact") return /substack/i.test(ctx.answer) ? [...CONTACT, "substack"] : [...CONTACT];
 
   // Known catalog ids only, lowercased, without duplicates. Anything else is dropped.
   const ids = [...new Set(candidates.map((c) => c.trim().toLowerCase()).filter((c) => HREF_BY_ID.has(c)))];
@@ -114,7 +117,7 @@ export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candi
     // Never send the visitor to the page they're already on.
     return !(a.kind === "internal" && (a.href.replace(/\/+$/, "") || "/") === page);
   });
-  return ordered.slice(0, MAX_ACTIONS);
+  return ordered.slice(0, USUAL_MAX);
 }
 
 export interface PickOptions {

@@ -197,3 +197,9 @@ describe("router recall", () => {
     expect(keywordRoute(knowledge, { question: "Where can I find you online?" }).intent).toBe("contact");
   });
 });
+
+describe("awards", () => {
+  it("routes award questions to awards.md by keywords", () => {
+    expect(keywordRoute(knowledge, { question: "What awards have you won?" }).files[0]).toBe("awards");
+  });
+});

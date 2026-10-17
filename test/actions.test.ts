@@ -46,8 +46,8 @@ describe("action catalog", () => {
     }
   });
 
-  it("keeps only known ids, de-duplicated, at most 3", () => {
-    expect(sanitizeActionIds(["Email", "email", "resume", "nope", "x", "github"])).toEqual(["email", "resume", "x"]);
+  it("keeps only known ids, de-duplicated, at most 4", () => {
+    expect(sanitizeActionIds(["Email", "email", "resume", "nope", "x", "github", "linkedin"])).toEqual(["email", "resume", "x", "github"]);
     expect(resolveActions(["resume", "nope"])).toEqual([
       { id: "resume", label: "Open my resume", href: ACTIONS.find((a) => a.id === "resume")!.href, kind: "external" },
     ]);

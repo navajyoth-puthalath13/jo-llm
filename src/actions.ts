@@ -3,8 +3,9 @@
 
 import { ACTIONS, type ActionKind, type JoAction } from "../content/actions";
 
-// Usually one button; up to three when the visitor asked for several places (e.g. ways to contact me).
-export const MAX_ACTIONS = 3;
+// Hard cap on buttons under one answer. Usually one; contact questions can get four (email,
+// LinkedIn, X and Substack when the answer mentions it). See buttons.ts for the rules.
+export const MAX_ACTIONS = 4;
 
 /** What the browser receives. Never contains `when`. */
 export interface ResolvedAction {

@@ -6,6 +6,7 @@ import about from "./about.md";
 import contact from "./contact.md";
 import background from "./background.md";
 import experience from "./experience.md";
+import awards from "./awards.md";
 import availability from "./availability.md";
 import howIWork from "./how-i-work.md";
 import accessibility from "./accessibility.md";
@@ -30,6 +31,7 @@ export const KNOWLEDGE_SOURCES: KnowledgeSource[] = [
   { path: "contact.md", text: contact },
   { path: "background.md", text: background },
   { path: "experience.md", text: experience },
+  { path: "awards.md", text: awards },
   { path: "availability.md", text: availability },
   { path: "how-i-work.md", text: howIWork },
   { path: "accessibility.md", text: accessibility },
