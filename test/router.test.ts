@@ -48,29 +48,33 @@ describe("provider router", () => {
 });
 
 describe("model chain", () => {
-  it("defaults to Groq 120b → Groq 20b → Gemini, and honours MODELS", async () => {
+  it("answers with Groq 120b then Gemini; routes and picks buttons with Groq 20b", async () => {
     const { loadConfig } = await import("../src/config");
-    const { defaultProviders } = await import("../src/providers/router");
+    const { defaultProviders, utilityProviders } = await import("../src/providers/router");
     const keys = { GEMINI_API_KEY: "g", GROQ_API_KEY: "q" };
     expect(defaultProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual([
       "groq:openai/gpt-oss-120b",
-      "groq:openai/gpt-oss-20b",
       "gemini:gemini-3.5-flash-lite",
       "gemini:gemini-3.1-flash-lite",
+    ]);
+    expect(utilityProviders(loadConfig({ ...keys } as never)).map((p) => p.name)).toEqual([
+      "groq:openai/gpt-oss-20b",
+      "gemini:gemini-3.5-flash-lite",
     ]);
     expect(
       defaultProviders(loadConfig({ ...keys, MODELS: "gemini:gemini-3.6-flash, groq:openai/gpt-oss-20b" } as never)).map((p) => p.name),
     ).toEqual(["gemini:gemini-3.6-flash", "groq:openai/gpt-oss-20b"]);
     // Providers without a key are skipped; nonsense falls back to the defaults.
     expect(defaultProviders(loadConfig({ GEMINI_API_KEY: "g" } as never)).every((p) => p.name.startsWith("gemini:"))).toBe(true);
-    expect(loadConfig({ MODELS: "nonsense,openai:gpt" } as never).models).toHaveLength(4);
+    expect(loadConfig({ MODELS: "nonsense,openai:gpt" } as never).models).toHaveLength(3);
+    expect(loadConfig({} as never).answerReasoning).toBe("medium");
   });
 
   it("gives Groq the short first-word deadline and Gemini the long one", async () => {
     const { loadConfig } = await import("../src/config");
     const { defaultProviders, firstTokenTimeouts } = await import("../src/providers/router");
     const config = loadConfig({ GEMINI_API_KEY: "g", GROQ_API_KEY: "q" } as never);
-    expect(firstTokenTimeouts(defaultProviders(config), config)).toEqual([2500, 2500, 10000, 10000]);
+    expect(firstTokenTimeouts(defaultProviders(config), config)).toEqual([2500, 10000, 10000]);
   });
 });
 

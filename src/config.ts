@@ -5,8 +5,9 @@
 // Checked 2026-10-16 (free tier, this account):
 //   groq   openai/gpt-oss-120b, openai/gpt-oss-20b: 8,000 tokens/min and 1,000 requests/day EACH, ~0.5s to first word
 //   gemini gemini-3.5-flash-lite, gemini-3.1-flash-lite: 15 requests/min each, 2–8s to first word
-// A Jo question costs ~4,500 tokens (jo.md + rules + answer), so one Groq model serves only ~1.7
-// questions a minute. Every model has its own quota, so chaining them multiplies capacity.
+// A Jo question used to cost ~4,500 tokens with the whole knowledge file in every prompt; with
+// routing it is ~2,000-2,500, so one Groq model serves roughly 3 questions a minute.
+// Every model has its own quota, so chaining them multiplies capacity.
 
 /** Workers Rate Limiting binding (declared locally so we don't depend on a specific workers-types version). */
 export interface RateLimitBinding {
@@ -26,8 +27,12 @@ export interface Env {
   // Vars (wrangler.toml / .dev.vars)
   ALLOWED_ORIGINS?: string;
   LINK_ALLOWLIST?: string;
-  /** Models to try in order, as provider:model, e.g. "groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite". */
+  /** Answer models to try in order, as provider:model, e.g. "groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite". */
   MODELS?: string;
+  /** Models for the small structured calls (router, button picker), same format. */
+  UTILITY_MODELS?: string;
+  /** gpt-oss reasoning effort for answers: low | medium | high. */
+  ANSWER_REASONING?: string;
   DAILY_BUDGET?: string;
   PER_IP_BURST?: string;
   PER_IP_REFILL_SECONDS?: string;
@@ -47,8 +52,13 @@ export interface ModelChoice {
 export interface Config {
   allowedOrigins: string[];
   linkAllowlist: string[];
-  /** Models to try, in order. The first gets the short first-token deadline. */
+  /** Answer models, in order. Groq models get the short first-token deadline. */
   models: ModelChoice[];
+  /** Router and button-picker models, in order. */
+  utilityModels: ModelChoice[];
+  answerReasoning: "low" | "medium" | "high";
+  routerBudgetMs: number;
+  buttonsBudgetMs: number;
   geminiKey: string;
   groqKey: string;
   ipSalt: string;
@@ -80,14 +90,21 @@ const int = (v: string | undefined, fallback: number): number => {
 };
 
 // Fast Groq models first, slower Gemini models as extra capacity.
+// Answers: the strongest free model first. gpt-oss-20b drifted from the facts more, so it only does
+// the small structured calls now. Gemini is slower to start but has its own quota.
 export const DEFAULT_MODELS: ModelChoice[] = [
   { provider: "groq", model: "openai/gpt-oss-120b" },
-  { provider: "groq", model: "openai/gpt-oss-20b" },
   { provider: "gemini", model: "gemini-3.5-flash-lite" },
   { provider: "gemini", model: "gemini-3.1-flash-lite" },
 ];
 
-export function parseModels(v: string | undefined): ModelChoice[] {
+// Router and button picker: small, fast, structured output (strict json_schema on Groq).
+export const DEFAULT_UTILITY_MODELS: ModelChoice[] = [
+  { provider: "groq", model: "openai/gpt-oss-20b" },
+  { provider: "gemini", model: "gemini-3.5-flash-lite" },
+];
+
+export function parseModels(v: string | undefined, fallback: ModelChoice[] = DEFAULT_MODELS): ModelChoice[] {
   const seen = new Set<string>();
   const out: ModelChoice[] = [];
   for (const item of list(v, [])) {
@@ -98,7 +115,7 @@ export function parseModels(v: string | undefined): ModelChoice[] {
     seen.add(item);
     out.push({ provider, model });
   }
-  return out.length ? out : DEFAULT_MODELS;
+  return out.length ? out : fallback;
 }
 
 /**
@@ -141,6 +158,10 @@ export function loadConfig(env: Env): Config {
     allowedOrigins: list(env.ALLOWED_ORIGINS, DEFAULT_ORIGINS),
     linkAllowlist: list(env.LINK_ALLOWLIST, DEFAULT_LINKS).map((s) => s.toLowerCase()),
     models: parseModels(env.MODELS),
+    utilityModels: parseModels(env.UTILITY_MODELS, DEFAULT_UTILITY_MODELS),
+    answerReasoning: env.ANSWER_REASONING === "low" || env.ANSWER_REASONING === "high" ? env.ANSWER_REASONING : "medium",
+    routerBudgetMs: 800,
+    buttonsBudgetMs: 1000,
     geminiKey: env.GEMINI_API_KEY ?? "",
     groqKey: env.GROQ_API_KEY ?? "",
     ipSalt: env.IP_SALT ?? "",
@@ -155,7 +176,7 @@ export function loadConfig(env: Env): Config {
     },
 
     maxBodyBytes: 8192,
-    maxOutputTokens: 180,
+    maxOutputTokens: 240,
     firstTokenTimeoutMs: 2500,
     // Gemini's free tier often takes 3–8s to start. When Groq is full, a slow answer beats "busy".
     fallbackFirstTokenTimeoutMs: 10000,

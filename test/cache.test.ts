@@ -7,7 +7,7 @@ describe("answer cache", () => {
     expect(normalizeQuestion("  How did you get into DESIGN?!  ")).toBe("how did you get into design");
   });
 
-  it("changes key when jo.md changes", async () => {
+  it("changes key when the knowledge changes", async () => {
     expect(await cacheKey("hi", "v1")).not.toBe(await cacheKey("hi", "v2"));
     expect(await cacheKey("Hi!", "v1")).toBe(await cacheKey("hi", "v1"));
   });

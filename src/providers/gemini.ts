@@ -1,5 +1,5 @@
 import { readSseData } from "../sse";
-import { ProviderBlockedError, httpError, type Provider, type ProviderRequest } from "./types";
+import { ProviderBlockedError, httpError, type JsonRequest, type Provider, type ProviderRequest } from "./types";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -18,6 +18,15 @@ interface GeminiChunk {
     finishReason?: string;
     content?: { parts?: { text?: string; thought?: boolean }[] };
   }[];
+}
+
+/** Gemini's responseSchema is an OpenAPI subset: no additionalProperties. */
+function toGeminiSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toGeminiSchema);
+  if (!schema || typeof schema !== "object") return schema;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(schema)) if (k !== "additionalProperties") out[k] = toGeminiSchema(v);
+  return out;
 }
 
 export function geminiProvider(apiKey: string, model: string): Provider {
@@ -54,6 +63,33 @@ export function geminiProvider(apiKey: string, model: string): Provider {
           throw new ProviderBlockedError();
         }
       }
+    },
+    async json(req: JsonRequest, signal: AbortSignal) {
+      const res = await fetch(`${BASE}/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: req.system }] },
+          contents: [{ role: "user", parts: [{ text: req.user }] }],
+          generationConfig: {
+            maxOutputTokens: req.maxTokens,
+            temperature: 0,
+            responseMimeType: "application/json",
+            responseSchema: toGeminiSchema(req.schema),
+          },
+          safetySettings: SAFETY_SETTINGS,
+        }),
+      });
+      if (!res.ok) throw httpError(res);
+      const body = (await res.json()) as GeminiChunk;
+      if (body.promptFeedback?.blockReason) throw new ProviderBlockedError();
+      const text = (body.candidates?.[0]?.content?.parts ?? [])
+        .filter((p) => p.text && !p.thought)
+        .map((p) => p.text)
+        .join("");
+      if (!text) throw new Error("empty structured response");
+      return text;
     },
   };
 }

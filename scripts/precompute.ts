@@ -2,15 +2,12 @@
 // so the most common questions cost no model quota and return instantly.
 // Usage: npm run precompute            (uses keys from .dev.vars)
 //        npm run precompute -- --dry   (print answers, write nothing)
-// Re-run after every jo.md or prompt edit + deploy: the cache key includes the prompt's hash.
-import { generateAnswer } from "../src/answer";
-import { catalogFingerprint, resolveActions } from "../src/actions";
+// Re-run after every knowledge, rules or catalog change + deploy: the cache key covers all three.
+import { resolveActions } from "../src/actions";
 import { cacheKey } from "../src/cache";
-import { loadConfig } from "../src/config";
-import { linksFromKnowledge } from "../src/guard/output";
-import { defaultProviders } from "../src/providers/router";
-import { buildSystemPrompt, buildUserMessage } from "../src/prompt";
-import { kvArgs, readDevVars, readJoMd, wrangler } from "./wrangler";
+import { answerCacheScope } from "../src/jo";
+import { askLocal, config, knowledge, requireKeys, sleep } from "./local-jo";
+import { kvArgs, wrangler } from "./wrangler";
 
 export const SUGGESTED_QUESTIONS = [
   "How can I contact you?",
@@ -19,45 +16,24 @@ export const SUGGESTED_QUESTIONS = [
   "What makes you different?",
 ];
 
+requireKeys();
 const dry = process.argv.includes("--dry");
-const joMd = readJoMd();
-if (/^\s*TODO:/m.test(joMd)) {
-  console.error("content/jo.md still has TODO: lines. Fill it in before precomputing.");
-  process.exit(1);
-}
-
-const config = loadConfig({ ...readDevVars(), ...process.env } as never);
-const providers = defaultProviders(config);
-if (!providers.length) {
-  console.error("No provider keys. Put GEMINI_API_KEY and/or GROQ_API_KEY in .dev.vars.");
-  process.exit(1);
-}
-const system = buildSystemPrompt(joMd);
+const scope = answerCacheScope(knowledge);
 
 let failed = 0;
 for (const question of SUGGESTED_QUESTIONS) {
-  const outcome = await generateAnswer({
-    providers,
-    system,
-    user: buildUserMessage({ question }),
-    maxTokens: config.maxOutputTokens,
-    timeoutsMs: [15000, 15000],
-    totalTimeoutMs: 30000,
-    linkAllowlist: [...config.linkAllowlist, ...linksFromKnowledge(joMd)],
-    signal: new AbortController().signal,
-    onText: async () => {},
-  });
+  const { outcome, actions } = await askLocal({ question });
   if (!outcome.ok) {
     console.error(`✗ ${question} → ${outcome.code}`);
     failed++;
     continue;
   }
-  const shown = resolveActions(outcome.actions).map((a) => `[${a.label} → ${a.href}]`).join(" ");
+  const shown = resolveActions(actions).map((a) => `[${a.label} → ${a.href}]`).join(" ");
   console.log(`✓ ${question}\n  ${outcome.text}  (${outcome.provider})${shown ? `\n  actions: ${shown}` : ""}`);
   if (!dry) {
-    const key = await cacheKey(question, `${system}\n${catalogFingerprint()}`);
-    const value = JSON.stringify({ text: outcome.text, actions: outcome.actions });
-    wrangler(kvArgs("put", key, value, `--expiration-ttl=${config.cacheTtlSeconds}`), { capture: true });
+    const value = JSON.stringify({ text: outcome.text, actions });
+    wrangler(kvArgs("put", await cacheKey(question, scope), value, `--expiration-ttl=${config.cacheTtlSeconds}`), { capture: true });
   }
+  await sleep(4000);
 }
 process.exit(failed ? 1 : 0);

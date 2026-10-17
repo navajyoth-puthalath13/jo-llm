@@ -71,7 +71,7 @@ describe("visible length cap", () => {
   });
 });
 
-describe("links from jo.md", () => {
+describe("links from the knowledge files", () => {
   it("allows every link and email written in the knowledge file", async () => {
     const { linksFromKnowledge } = await import("../src/guard/output");
     const md = "Email: mailto:Me@Example.com\nLinkedIn: https://www.linkedin.com/in/me, X: https://x.com/me.\nSite: https://navajyoth.com/";

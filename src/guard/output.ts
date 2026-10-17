@@ -14,7 +14,7 @@ const URL_RE = /\b(?:mailto:[^\s<>()]+|https?:\/\/[^\s<>()]+|www\.[^\s<>()]+|[a-
 const EMAIL_RE = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi;
 
 /**
- * Every link and email written in jo.md is allowed automatically: jo.md is the trusted source,
+ * Every link and email written in the knowledge files is allowed automatically: they are the trusted source,
  * so Jo can always share what it says, without keeping LINK_ALLOWLIST in sync by hand.
  */
 export function linksFromKnowledge(md: string): string[] {

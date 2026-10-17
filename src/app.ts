@@ -1,24 +1,27 @@
 import { Hono, type Context } from "hono";
-import joMdDefault from "../content/jo.md";
-import { generateAnswer } from "./answer";
-import { catalogFingerprint, resolveActions } from "./actions";
+import { KNOWLEDGE_SOURCES } from "../content/knowledge/index";
+import { resolveActions } from "./actions";
 import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
 import { isAllowedOrigin, loadConfig, type Config, type Env } from "./config";
 import { isEnabled } from "./guard/killswitch";
 import { hashIp, type Limiter } from "./guard/ratelimit";
 import { linksFromKnowledge } from "./guard/output";
 import { parseAsk, readCappedBody } from "./guard/validate";
-import { buildSystemPrompt, buildUserMessage } from "./prompt";
-import { defaultProviders, firstTokenTimeouts } from "./providers/router";
+import { answerCacheScope, runJo } from "./jo";
+import { allFacts, buildKnowledge, type KnowledgeSource } from "./knowledge";
+import { defaultProviders, utilityProviders } from "./providers/router";
 import type { Provider } from "./providers/types";
 import { createEventStream, errorResponse, SSE_HEADERS, type ErrorCode } from "./sse";
 
 export interface AppDeps {
   /** Builds the limiter for a request. Production wires the Durable Object here. */
   limiter: (env: Env, config: Config) => Limiter;
-  /** Override providers (tests). Defaults to Gemini → Groq. */
+  /** Override the answer providers (tests). Defaults to the MODELS chain. */
   providers?: (config: Config) => Provider[];
-  joMd?: string;
+  /** Override the router/button providers (tests). Defaults to the UTILITY_MODELS chain. */
+  utilityProviders?: (config: Config) => Provider[];
+  /** Override the knowledge files (tests). Defaults to content/knowledge/. */
+  knowledge?: KnowledgeSource[];
 }
 
 type AppEnv = { Bindings: Env; Variables: { config: Config; origin: string | null } };
@@ -53,9 +56,9 @@ function waitUntil(c: Context<AppEnv>, p: Promise<unknown>) {
 }
 
 export function createApp(deps: AppDeps) {
-  const joMd = deps.joMd ?? joMdDefault;
-  const systemPrompt = buildSystemPrompt(joMd);
-  const knowledgeLinks = linksFromKnowledge(joMd);
+  const knowledge = buildKnowledge(deps.knowledge ?? KNOWLEDGE_SOURCES);
+  const knowledgeLinks = linksFromKnowledge(allFacts(knowledge));
+  const cacheScope = answerCacheScope(knowledge);
   const app = new Hono<AppEnv>();
 
   // Security headers on every response.
@@ -134,7 +137,7 @@ export function createApp(deps: AppDeps) {
     trace("4 limits", "✓ under the per-IP limits");
 
     const cacheable = !input.quote && !input.history?.length;
-    const key = cacheable ? await cacheKey(input.question, `${systemPrompt}\n${catalogFingerprint()}`) : null;
+    const key = cacheable ? await cacheKey(input.question, cacheScope) : null;
     if (!key) trace("5 cache", "skipped: questions with a quote or history are never cached");
 
     if (key) {
@@ -164,28 +167,28 @@ export function createApp(deps: AppDeps) {
 
     const providers = (deps.providers ?? defaultProviders)(config);
     if (providers.length === 0) return fail("busy", { reason: "no_providers" });
+    const utility = (deps.utilityProviders ?? utilityProviders)(config);
 
+    // One visitor question is one budget unit, whatever it costs: the router and button calls
+    // (small, on the utility models) ride along with the answer. Cached answers cost nothing.
     try {
       if (!(await limiter.spend())) return fail("busy", { reason: "budget" });
     } catch {
       return fail("busy");
     }
-    trace("6 budget", "✓ global daily budget has room");
-    trace("7 prompt", `jo.md + rules as system prompt; visitor text wrapped in tags:\n${buildUserMessage(input)}`);
-    trace("8 model", `trying ${providers.map((p) => p.name).join(" → ")} (${config.firstTokenTimeoutMs}ms to first word)`);
+    trace("6 budget", "✓ global daily budget has room (one unit covers route + answer + buttons)");
 
     const { readable, writer } = createEventStream();
     const clientGone = new AbortController();
 
     const run = (async () => {
       let firstTokenMs: number | undefined;
-      const outcome = await generateAnswer({
-        providers,
-        system: systemPrompt,
-        user: buildUserMessage(input),
-        maxTokens: config.maxOutputTokens,
-        timeoutsMs: firstTokenTimeouts(providers, config),
-        totalTimeoutMs: config.totalTimeoutMs,
+      const result = await runJo({
+        input,
+        knowledge,
+        answerProviders: providers,
+        utilityProviders: utility,
+        config,
         linkAllowlist: [...config.linkAllowlist, ...knowledgeLinks],
         signal: clientGone.signal,
         onText: async (t) => {
@@ -197,19 +200,18 @@ export function createApp(deps: AppDeps) {
             throw err;
           }
         },
-        log: (provider, result) => {
-          trace("8 model", `✗ ${provider} failed (${result}), falling through`);
-          logEvent({ outcome: "provider_fallthrough", provider, result });
-        },
+        log: (provider, result) => logEvent({ outcome: "provider_fallthrough", provider, result }),
         trace,
-      }).catch(() => ({ ok: false as const, code: "busy" as const, partial: false, provider: undefined }));
+      }).catch(() => null);
+      const outcome = result?.outcome ?? { ok: false as const, code: "busy" as const, partial: false };
 
       try {
         if (outcome.ok) {
-          const actions = resolveActions(outcome.actions);
+          const ids = result?.actions ?? [];
+          const actions = resolveActions(ids);
           if (actions.length) await writer.actions(actions);
           await writer.done(false);
-          if (key) await putCached(c.env.JO_KV, key, { text: outcome.text, actions: outcome.actions }, config.cacheTtlSeconds);
+          if (key) await putCached(c.env.JO_KV, key, { text: outcome.text, actions: ids }, config.cacheTtlSeconds);
         } else {
           await writer.error(outcome.code);
         }
@@ -222,6 +224,9 @@ export function createApp(deps: AppDeps) {
       logEvent({
         outcome: outcome.ok ? "ok" : outcome.code,
         provider: outcome.provider,
+        route: result?.route.source,
+        intent: result?.route.intent,
+        buttons: result?.buttonSource,
         cached: false,
         ttft: firstTokenMs,
         ms: Date.now() - started,

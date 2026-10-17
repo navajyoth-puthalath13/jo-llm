@@ -37,8 +37,3 @@ export function readDevVars(): Record<string, string> {
 export function readKnowledgeSources(): { path: string; text: string }[] {
   return KNOWLEDGE_FILES.map((path) => ({ path, text: readFileSync(join(ROOT, "content", "knowledge", path), "utf8") }));
 }
-
-/** Old single-file knowledge. Removed once every script uses readKnowledgeSources. */
-export function readJoMd(): string {
-  return readFileSync(join(ROOT, "content", "jo.md"), "utf8");
-}
