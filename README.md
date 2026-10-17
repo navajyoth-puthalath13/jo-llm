@@ -6,7 +6,7 @@ This repo is only the backend. The portfolio calls it over `fetch`.
 
 - **Runtime:** Cloudflare Workers (free plan), Hono, Zod
 - **Models** (all free tier, each with its own quota; see [The model chain](#the-model-chain)):
-  - Answers: Groq `openai/gpt-oss-120b` (reasoning `medium`), then Gemini `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`.
+  - Answers: Groq `openai/gpt-oss-120b` (reasoning `medium`), then Gemini `gemini-3.6-flash` (thinking `low`).
   - Routing and buttons: Groq `openai/gpt-oss-20b`, then Gemini, with strict structured output.
 - **State:** KV holds the kill switch and the answer cache. One SQLite Durable Object holds the rate-limit counters. A Rate Limiting binding acts as a burst filter.
 
@@ -83,10 +83,11 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
 
 | Step | Models, in order | Settings |
 |---|---|---|
-| Answer (`MODELS`) | `groq:openai/gpt-oss-120b`, `gemini:gemini-3.5-flash-lite`, `gemini:gemini-3.1-flash-lite` | `ANSWER_REASONING = "medium"`; 2.5 s to the first word on Groq, 10 s on Gemini |
+| Answer (`MODELS`) | `groq:openai/gpt-oss-120b`, `gemini:gemini-3.6-flash` | `ANSWER_REASONING = "medium"`; Gemini thinks at `low`; 2.5 s to the first word on Groq, 10 s on Gemini |
 | Route + buttons (`UTILITY_MODELS`) | `groq:openai/gpt-oss-20b`, `gemini:gemini-3.5-flash-lite` | reasoning `low`, strict JSON schema, 800 ms and 1 s budgets |
 
-- `gpt-oss-20b` is no longer in the answer chain, because it drifted from the facts more. It does only the small structured calls.
+- **Only the strongest free models write answers.** `gpt-oss-20b` drifted from the facts. Gemini Flash-Lite invented a whole project ("ReviewFlow is a tool I built…") every time it was asked about something not in the files, even at temperature 0. Both now do only the small structured calls, which return ids, not text.
+- **Gemini 3.6 Flash** is slower (about 2.5 s to the first word, since it thinks first), but stayed grounded in testing.
 - A model that returns 429 is skipped for its `Retry-After` (30 s at most).
 - Gemini rarely fits inside the router's 800 ms, so in practice the router falls back to keywords when Groq is busy.
 - All of these are vars in `wrangler.toml`.
@@ -135,7 +136,7 @@ With `JO_DEBUG=true` in `.dev.vars`, terminal 1 prints every step of each reques
 [jo +  29ms] 6 budget   ✓ global daily budget has room (one unit covers route + answer + buttons)
 [jo + 783ms] 7 route    ✓ groq:openai/gpt-oss-20b: intent project, files ["care-scribe"]
 [jo + 783ms] 8 prompt   always-files + care-scribe; visitor text in tags: …
-[jo + 783ms] 9 model    trying groq:openai/gpt-oss-120b → gemini:gemini-3.5-flash-lite → …
+[jo + 783ms] 9 model    trying groq:openai/gpt-oss-120b → gemini:gemini-3.6-flash
 [jo +1381ms] 9 model    groq:openai/gpt-oss-120b answered first: "No"
 [jo +1439ms] 10 output  raw model text: "…"
 [jo +1439ms] 10 output  sent to browser:  "…"
@@ -231,6 +232,7 @@ The cache key covers every knowledge file, so old answers stop being served righ
 
 - **KV:** 1,000 writes a day. Only cache misses on plain questions write, and the global budget caps those. Keep `DAILY_BUDGET` at 1000 or below.
 - **Durable Objects:** the free plan allows 100k requests a day. Each question uses about 2 requests.
+- **Groq daily tokens are the real ceiling.** `gpt-oss-120b` allows 200,000 tokens a day, about 65 questions at ~3,000 tokens each (prompt, reasoning and answer). After that, answers come from Gemini 3.6 Flash: slower, but grounded. `gpt-oss-20b` has its own 200,000 a day, which covers routing and buttons for a few hundred questions. Running `npm run eval` uses about 100,000 of the answer model's daily tokens.
 - **Gemini and Groq:** free-tier RPM and RPD limits are per project or account. When the first provider errors or returns 429, requests fall through to the other one. Gemini's free tier on this key allows 15 requests a minute.
 
 ## Tests
@@ -239,7 +241,7 @@ The cache key covers every knowledge file, so old answers stop being served righ
 npm test               # mocked providers, no network
 npm run test:live      # opt-in: attack prompts through the real pipeline (keys in .dev.vars)
 npm run test:live -- --provider=groq
-npm run eval           # opt-in: 36 real questions, checks routing, facts and buttons (~12 min)
+npm run eval           # opt-in: 36 real questions, checks routing, facts and buttons (~12 min, ~half of Groq's daily tokens)
 npm run eval -- --only=care-scribe --verbose
 ```
 

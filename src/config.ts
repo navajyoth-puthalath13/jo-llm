@@ -28,7 +28,7 @@ export interface Env {
   // Vars (wrangler.toml / .dev.vars)
   ALLOWED_ORIGINS?: string;
   LINK_ALLOWLIST?: string;
-  /** Answer models to try in order, as provider:model, e.g. "groq:openai/gpt-oss-120b,gemini:gemini-3.5-flash-lite". */
+  /** Answer models to try in order, as provider:model, e.g. "groq:openai/gpt-oss-120b,gemini:gemini-3.6-flash". */
   MODELS?: string;
   /** Models for the small structured calls (router, button picker), same format. */
   UTILITY_MODELS?: string;
