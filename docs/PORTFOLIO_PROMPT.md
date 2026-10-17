@@ -41,7 +41,7 @@ The response is `text/event-stream` (Server-Sent Events) with exactly these even
 | event   | data                                   | meaning                                 |
 | ------- | -------------------------------------- | --------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                | append to the bubble                    |
-| `actions` | `{ "actions": [{ "id": "resume", "label": "Open my resume", "href": "https://…", "kind": "external" }] }` | 0–3 buttons to show under the answer (optional; usually 1) |
+| `actions` | `{ "actions": [{ "id": "resume", "label": "Open my resume", "href": "https://…", "kind": "external" }] }` | 0–4 buttons to show under the answer (optional; usually 1, and up to 4 for "how can I reach you": Email me, Connect on LinkedIn, Find me on X, Read my Substack). Make sure 4 fit, wrapping if needed |
 | `done`  | `{ "cached": boolean }`                | the answer is complete                  |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` | replace the bubble text with the matching line below |
 

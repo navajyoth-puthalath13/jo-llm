@@ -69,6 +69,11 @@ function judge(c: EvalCase, r: LocalRun): Verdict {
       : c.buttons.every((b) => r.actions.includes(b));
     if (!buttons) problems.push(`buttons ${JSON.stringify(r.actions)}, expected ${c.exactButtons ? "exactly " : ""}${JSON.stringify(c.buttons)}`);
   }
+  const unwanted = (c.notButtons ?? []).filter((b) => r.actions.includes(b));
+  if (unwanted.length) {
+    buttons = false;
+    problems.push(`buttons ${JSON.stringify(r.actions)} must not include ${JSON.stringify(unwanted)}`);
+  }
   return { route, content, buttons, problems };
 }
 

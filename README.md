@@ -36,7 +36,7 @@ The response is `text/event-stream` and uses only these events:
 | event   | data                                                                 |
 | ------- | -------------------------------------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                                              |
-| `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–3 buttons; optional) |
+| `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–4 buttons; optional) |
 | `done`  | `{ "cached": boolean }`                                              |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` |
 
@@ -64,14 +64,14 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
 
    Streaming, the sentinel gate, the leak checks and the output sanitizer are unchanged. The answer is capped at 240 tokens; past three quarters of the cap, text is released only in whole sentences, so a capped answer ends at a full stop.
 3. **Buttons** ([`src/buttons.ts`](src/buttons.ts)). A structured call gets the question, Jo's final answer, the page, the intent and the catalog (ids and `when` lines, never hrefs), and proposes ids. Budget 1 s. Then fixed rules in code decide:
-   - contact → `email`, `linkedin`, `x`, in that order
+   - contact → `email`, `linkedin`, `x`, in that order, plus `substack` when the answer mentions it (never GitHub)
    - resume → `resume` first
    - a named project → that project's button first
    - `work_overview` → `work`
    - private → `email` only, and only if the answer points to email
    - small talk → none
    - never the page the visitor is already on
-   - at most 3, no duplicates
+   - at most 3 (4 for contact), no duplicates
 
    If the call fails, the routed files' `actions` frontmatter goes through the same rules. Contact, private and small-talk questions skip the call entirely.
 
@@ -94,7 +94,7 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
 
 ## Buttons (actions)
 
-Jo can offer up to three buttons under an answer, for example "Open my resume" or "Email me". Models only ever propose ids. The server looks up the label and href in [`content/actions.ts`](content/actions.ts), so no URL ever comes from a model. See step 3 above for how they're chosen.
+Jo can offer up to three buttons under an answer (four for contact questions), for example "Open my resume" or "Email me". Models only ever propose ids. The server looks up the label and href in [`content/actions.ts`](content/actions.ts), so no URL ever comes from a model. See step 3 above for how they're chosen.
 
 - **To add a button:** add an entry to `content/actions.ts` (with a clear `when`), and list its id under `actions:` in the related knowledge file.
 - Every `external` and `mailto` href must pass `LINK_ALLOWLIST`, and `test/actions.test.ts` checks this.
