@@ -148,8 +148,21 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
         }
       }
     } catch {
-      // Upstream failed or timed out mid-answer: keep what we already have.
+      // Upstream failed or timed out mid-answer. Keep what we have only if it ends at a full
+      // sentence; a half sentence ("answering from what he's shared on") is worse than the
+      // in-character "busy" line, which the client shows in place of the partial text.
       if (!emitted && !held && !raw.trim()) return { ok: false, code: "busy", provider, partial: false };
+      if (gate !== "pending") {
+        // Release everything the filters still hold, then judge the whole visible answer.
+        await emit(held + sanitizer.push(splitter.flush()) + sanitizer.flush());
+        held = "";
+        await flushTail();
+        const soFar = emitted.trim();
+        if (soFar && lastSentenceEnd(soFar) !== soFar.length) {
+          t("10 output", "stream failed mid-sentence: replaced with busy");
+          return { ok: false, code: "busy", provider, partial: true };
+        }
+      }
     }
 
     if (gate === "pending") {

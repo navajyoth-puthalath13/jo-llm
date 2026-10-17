@@ -18,6 +18,8 @@ export interface EvalCase {
   buttons?: string[];
   exactButtons?: boolean;
   decline?: boolean;
+  /** Either an answer that passes the checks or the off-topic decline is fine. */
+  declineOk?: boolean;
 }
 
 const EMAIL = "navajyothputalath13@gmail.com";
@@ -90,6 +92,8 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "reviewflow is gone",
     input: { question: "Tell me about ReviewFlow" },
+    // An unfamiliar name is ambiguous: declining is fine, describing it is not.
+    declineOk: true,
     contains: [NOT_SHARED],
     never: [/reviewflow (is|was) (a|an|my)/i, "I built ReviewFlow"],
   },

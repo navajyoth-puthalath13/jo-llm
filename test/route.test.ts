@@ -185,3 +185,15 @@ describe("off-topic safety net", () => {
     }
   });
 });
+
+describe("router recall", () => {
+  it("adds the strongest keyword match when the model missed it", async () => {
+    const p = mockJsonProvider(JSON.stringify({ offtopic: false, intent: "how_i_work", files: ["how-i-work"] }));
+    const r = await route([p], "What are you working on right now?");
+    expect(r.files).toEqual(["how-i-work", "system"]);
+  });
+
+  it("knows 'where can I find you online' is a contact question", () => {
+    expect(keywordRoute(knowledge, { question: "Where can I find you online?" }).intent).toBe("contact");
+  });
+});

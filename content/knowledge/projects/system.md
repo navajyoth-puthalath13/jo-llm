@@ -1,7 +1,7 @@
 ---
 id: system
 title: System
-covers: what it is, my role, why I started it, status, what I'm doing on it now, what I'm learning, live registry
+covers: what I'm currently working on, what System is, my role, why I started it, status, what I'm learning, live registry
 keywords: [system, design system, registry, tokens, typography, components, component library, documentation, working on, right now, currently, current project, building now, zero to one]
 actions: [system]
 ---

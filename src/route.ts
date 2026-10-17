@@ -141,7 +141,7 @@ const GREETING = /^\s*(hi|hii+|hey+|hello|yo|hola|namaste|good (morning|afternoo
 const INTENT_WORDS: [Intent, RegExp][] = [
   ["resume", /\b(resume|cv|curriculum)\b/],
   ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left)\b/],
-  ["contact", /\b(contact|reach|email|e-mail|linkedin|twitter|follow|connect|get in touch|socials?|dm)\b|\bon x\b/],
+  ["contact", /\b(contact|reach|email|e-mail|linkedin|twitter|follow|connect|get in touch|socials?|dm|online|find you|where can i find)\b|\bon x\b/],
   ["writing", /\b(substack|blog|blogs|newsletter|articles?|do you write|writing)\b/],
   ["photography", /\b(photo|photos|photography|camera|pictures)\b/],
   ["availability", /\b(hire|hiring|role|roles|available|availability|open to work|freelance|relocat\w*|notice period|start date|full-time|full time|contract|job offer)\b/],
@@ -217,12 +217,14 @@ export async function routeQuestion(o: RouteOptions): Promise<Route> {
   if (!result) return keywordRoute(o.knowledge, o.input);
   const { intent } = result.value;
   let { offtopic } = result.value;
-  let files = cleanFileIds(o.knowledge, result.value.files);
+  const byKeywords = keywordRoute(o.knowledge, o.input);
+  // The model's picks first, plus the strongest keyword match if the model missed it: a single
+  // router slip ("working on right now" → how-i-work) must not hide the file with the answer.
+  let files = cleanFileIds(o.knowledge, [...result.value.files, ...byKeywords.files.slice(0, 1)]);
   // A wrong "off-topic" refuses a real question about Navajyoth, so the router alone can't decide
   // it when the question clearly matches his files. It goes to the answer model instead, whose
   // [[OFFTOPIC]] sentinel still declines anything that really is off-topic.
   if (offtopic) {
-    const byKeywords = keywordRoute(o.knowledge, o.input);
     if (byKeywords.files.length) {
       offtopic = false;
       files = byKeywords.files;

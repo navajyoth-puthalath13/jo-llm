@@ -33,6 +33,9 @@ function judge(c: EvalCase, r: LocalRun): Verdict {
     if (!ok) problems.push(`expected a decline, got ${r.outcome.ok ? `"${text}"` : r.outcome.code}`);
     return { route: null, content: ok, buttons: r.actions.length === 0, problems };
   }
+  if (!r.outcome.ok && c.declineOk && r.outcome.code === "offtopic" && !r.actions.length) {
+    return { route: null, content: true, buttons: true, problems };
+  }
   if (!r.outcome.ok) {
     problems.push(`no answer: ${r.outcome.code}${r.route.offtopic ? " (router said off-topic)" : ""}`);
     return { route: r.route.source === "model" ? false : null, content: false, buttons: false, problems };
