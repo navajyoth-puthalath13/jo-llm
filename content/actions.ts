@@ -34,7 +34,7 @@ const entries: JoAction[] = [
   {
     id: "resume",
     label: "Open my resume",
-    href: "https://drive.google.com/file/d/1ljdZrg_4GmGbNfOpaENBb_9KSCI5wcXf/view?usp=sharing",
+    href: "https://drive.google.com/file/d/19pVWr0N1-GL_lnKO11iLGKijxkJuT8qR/view?usp=drive_link",
     kind: "external",
     when: "visitor asks for my resume or CV",
   },
