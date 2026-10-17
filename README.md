@@ -1,11 +1,13 @@
 # Jo LLM
 
-A tiny question-answering Worker for navajyoth.com. Visitors ask the illustrated character Jo about Navajyoth. Jo answers in first person, in one to three short sentences, and only from [`content/jo.md`](content/jo.md).
+A tiny question-answering Worker for navajyoth.com. Visitors ask the illustrated character Jo about Navajyoth. Jo answers in first person, in a few short sentences, and only from the knowledge files in [`content/knowledge/`](content/knowledge/).
 
 This repo is only the backend. The portfolio calls it over `fetch`.
 
 - **Runtime:** Cloudflare Workers (free plan), Hono, Zod
-- **Models:** a chain of free-tier models, each with its own quota: Groq `openai/gpt-oss-120b`, then Groq `openai/gpt-oss-20b` (both start in ~0.5 s), then Gemini `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite` (2–8 s to start). A model that returns 429 is skipped for 30 s. The chain is the `MODELS` var in `wrangler.toml`. Groq's free tier no longer includes Llama chat models.
+- **Models** (all free tier, each with its own quota; see [The model chain](#the-model-chain)):
+  - Answers: Groq `openai/gpt-oss-120b` (reasoning `medium`), then Gemini `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`.
+  - Routing and buttons: Groq `openai/gpt-oss-20b`, then Gemini, with strict structured output.
 - **State:** KV holds the kill switch and the answer cache. One SQLite Durable Object holds the rate-limit counters. A Rate Limiting binding acts as a burst filter.
 
 ## API
@@ -45,16 +47,58 @@ The response is `text/event-stream` and uses only these events:
 - Cached answers arrive as `token` events too, so the code path is the same. They replay their `actions` as well.
 - `actions` comes after the last `token` and before `done`, only when Jo offers at least one button. It never comes with an `error`. Label, href and kind come from the catalog in `content/actions.ts`, never from the model. `internal` hrefs are paths on navajyoth.com. Old clients can ignore the event.
 
+- A `403` with a plain-text body means the origin is not allowed. Browsers won't let you read it anyway.
+
+## How a question flows
+
+Each `/ask` that isn't served from the cache makes up to three model calls ([`src/jo.ts`](src/jo.ts)):
+
+1. **Route** ([`src/route.ts`](src/route.ts)). A small structured call on `gpt-oss-20b` (Groq strict `json_schema`; Gemini `responseSchema` as fallback) returns `{ offtopic, intent, files }`:
+   - `files` holds up to 3 knowledge-file ids, constrained to an enum of real ids and checked again with Zod.
+   - Budget 800 ms. If the call fails or runs out of time, a deterministic keyword router uses each file's `keywords`.
+   - If routing finds nothing, Jo gets every file, unless the intent is already covered by the always-included files (greetings, contact, resume, writing, private, about).
+   - Off-topic questions are declined here, without calling the answer model. The answer step's `[[OFFTOPIC]]` sentinel stays as a second layer.
+2. **Answer** ([`src/answer.ts`](src/answer.ts)). The system prompt is:
+   - `voice` + `boundaries` + `about` + `contact` (always), then the routed files, in a stable order,
+   - then short grounding rules ([`src/prompt.ts`](src/prompt.ts)).
+
+   Streaming, the sentinel gate, the leak checks and the output sanitizer are unchanged. The answer is capped at 240 tokens; past three quarters of the cap, text is released only in whole sentences, so a capped answer ends at a full stop.
+3. **Buttons** ([`src/buttons.ts`](src/buttons.ts)). A structured call gets the question, Jo's final answer, the page, the intent and the catalog (ids and `when` lines, never hrefs), and proposes ids. Budget 1 s. Then fixed rules in code decide:
+   - contact → `email`, `linkedin`, `x`, in that order
+   - resume → `resume` first
+   - a named project → that project's button first
+   - `work_overview` → `work`
+   - private → `email` only, and only if the answer points to email
+   - small talk → none
+   - never the page the visitor is already on
+   - at most 3, no duplicates
+
+   If the call fails, the routed files' `actions` frontmatter goes through the same rules. Contact, private and small-talk questions skip the call entirely.
+
+**Budget:** one visitor question counts as one unit of `DAILY_BUDGET`, however many calls it makes. Routing and buttons are small calls (about 1,000 and 500 tokens) on `gpt-oss-20b`, which has its own Groq quota separate from the answer model's. Cached answers cost nothing and make no calls.
+
+**Cache:** the key covers the normalised question plus a hash of every knowledge file, the rules and the button catalog. Buttons are cached with the answer.
+
+## The model chain
+
+| Step | Models, in order | Settings |
+|---|---|---|
+| Answer (`MODELS`) | `groq:openai/gpt-oss-120b`, `gemini:gemini-3.5-flash-lite`, `gemini:gemini-3.1-flash-lite` | `ANSWER_REASONING = "medium"`; 2.5 s to the first word on Groq, 10 s on Gemini |
+| Route + buttons (`UTILITY_MODELS`) | `groq:openai/gpt-oss-20b`, `gemini:gemini-3.5-flash-lite` | reasoning `low`, strict JSON schema, 800 ms and 1 s budgets |
+
+- `gpt-oss-20b` is no longer in the answer chain, because it drifted from the facts more. It does only the small structured calls.
+- A model that returns 429 is skipped for its `Retry-After` (30 s at most).
+- Gemini rarely fits inside the router's 800 ms, so in practice the router falls back to keywords when Groq is busy.
+- All of these are vars in `wrangler.toml`.
+
 ## Buttons (actions)
 
-Jo can offer up to three buttons under an answer (usually one), for example "Open my resume" or "Email me". The model only picks ids, by ending its reply with a hidden `[[ACT:resume,email]]` line. The server holds that line back so it never shows. Then it:
+Jo can offer up to three buttons under an answer, for example "Open my resume" or "Email me". Models only ever propose ids. The server looks up the label and href in [`content/actions.ts`](content/actions.ts), so no URL ever comes from a model. See step 3 above for how they're chosen.
 
-- parses it strictly,
-- drops unknown ids, duplicates and anything past the third,
-- looks up the label and href in [`content/actions.ts`](content/actions.ts).
-
-The model never sees a URL and can't invent one. To add a button, add an entry to that file (with a `when` description). Every `external` and `mailto` href must pass `LINK_ALLOWLIST`, and `test/actions.test.ts` checks this. Editing a label or URL takes effect immediately, cached answers included. Adding or removing an entry, or changing its `when`, invalidates the cache.
-- A `403` with a plain-text body means the origin is not allowed. Browsers won't let you read it anyway.
+- **To add a button:** add an entry to `content/actions.ts` (with a clear `when`), and list its id under `actions:` in the related knowledge file.
+- Every `external` and `mailto` href must pass `LINK_ALLOWLIST`, and `test/actions.test.ts` checks this.
+- **Editing a label or URL** takes effect immediately, cached answers included.
+- **Adding or removing an entry,** or changing its `when`, invalidates the cache.
 
 ## Setup
 
@@ -88,12 +132,14 @@ With `JO_DEBUG=true` in `.dev.vars`, terminal 1 prints every step of each reques
 [jo +  17ms] 3 validate ✓ question "Where can I see your code?"
 [jo +  26ms] 4 limits   ✓ under the per-IP limits
 [jo +  28ms] 5 cache    miss: will ask a model
-[jo +  29ms] 6 budget   ✓ global daily budget has room
-[jo +  29ms] 7 prompt   jo.md + rules as system prompt; visitor text wrapped in tags: …
-[jo +  29ms] 8 model    trying groq → gemini (2500ms to first word)
-[jo + 520ms] 8 model    groq answered first: "You"
-[jo + 530ms] 9 output   raw model text: "…"
-[jo + 530ms] 9 output   sent to browser:  "…"
+[jo +  29ms] 6 budget   ✓ global daily budget has room (one unit covers route + answer + buttons)
+[jo + 783ms] 7 route    ✓ groq:openai/gpt-oss-20b: intent project, files ["care-scribe"]
+[jo + 783ms] 8 prompt   always-files + care-scribe; visitor text in tags: …
+[jo + 783ms] 9 model    trying groq:openai/gpt-oss-120b → gemini:gemini-3.5-flash-lite → …
+[jo +1381ms] 9 model    groq:openai/gpt-oss-120b answered first: "No"
+[jo +1439ms] 10 output  raw model text: "…"
+[jo +1439ms] 10 output  sent to browser:  "…"
+[jo +1940ms] 11 buttons model: care-scribe
 ```
 
 `JO_DEBUG` is for local use only. Never set it in production, because it prints questions.
@@ -108,7 +154,7 @@ npx wrangler secret put GROQ_API_KEY
 npx wrangler secret put IP_SALT
 npm run deploy                                 # prints https://jo-llm.<account>.workers.dev
 npm run jo -- on                               # the switch starts OFF (fails closed)
-npm run precompute                             # after jo.md is filled in
+npm run precompute                             # after any knowledge change
 ```
 
 Before each deploy, check that the model names in `wrangler.toml` are still on the free tier. You can confirm that at https://ai.google.dev/gemini-api/docs/pricing and https://console.groq.com/docs/models.
@@ -129,9 +175,20 @@ Emergency override: set `JO_FORCE_OFF = "true"`, either in the dashboard (Worker
 
 ## Editing what Jo knows
 
-Edit `content/jo.md`, deploy, then run `npm run precompute`.
+Everything Jo knows is in [`content/knowledge/`](content/knowledge/): one small file per topic, each with frontmatter (`id`, `title`, `covers`, `keywords`, `actions`) and short fact bullets. [`content/knowledge/README.md`](content/knowledge/README.md) explains the template.
 
-The cache key includes a hash of the whole prompt (jo.md plus the rules), so old answers stop being served right away. They expire from KV after 7 days. Keep `<!-- DRAFT: review -->` markers until you've checked each section. Add any link Jo may mention to `LINK_ALLOWLIST`; the output filter strips every other URL and email.
+The rules:
+- **One fact, one place.** Each fact lives in exactly one file.
+- **`TODO:` lines are never facts.** They, comments and headings are stripped before the prompt is built.
+- **Adding a new project:** create the file, then add it to `files.ts` and `index.ts`.
+
+To change something:
+1. Edit the file.
+2. Run `npm test`, which checks frontmatter, unique ids and that buttons exist.
+3. Optionally run `npm run eval`.
+4. Deploy, then run `npm run precompute`.
+
+The cache key covers every knowledge file, so old answers stop being served right away; they expire from KV after 7 days. Links written in the knowledge files are allowed in answers automatically. Any other link Jo may mention goes in `LINK_ALLOWLIST`, and the output filter strips every other URL and email.
 
 ## Security model
 
@@ -148,19 +205,26 @@ The cache key includes a hash of the whole prompt (jo.md plus the rules), so old
   - Visitor text goes only inside `<visitor_question>`, `<selected_text>`, `<page_path>` and `<previous_exchanges>`.
   - `<` and `>` in visitor text are escaped, so it can't close those tags.
   - The rules say tag contents are data, never instructions.
-  - The model has no tools, and output is capped at 180 tokens.
+  - No model has tools. Answers are capped at 240 tokens.
+  - The router and button calls follow the same rules:
+    - visitor text is escaped inside data tags,
+    - output is strict structured JSON validated with Zod,
+    - every id is checked against the knowledge files or the button catalog,
+    - no URL ever comes from a model.
 - **Off-topic questions:** the model replies `[[OFFTOPIC]]`. The opening tokens are held back until that's ruled out, so a decline never streams.
 - **Output filtering:**
   - Markdown, HTML, and non-allowlisted links or emails are removed as the answer streams. Text is released only at word boundaries, so a URL is always seen whole.
   - If the rules marker, the sentinel or a tag name appears in the output, the answer is replaced with an `offtopic` decline.
-- **Gemini:** safety filters run at `BLOCK_LOW_AND_ABOVE`. If Gemini blocks a request, it's treated as off-topic and not retried on Groq.
+- **Gemini:** safety filters run at Google's default `BLOCK_MEDIUM_AND_ABOVE`. `LOW` was tested and blocked harmless output. If Gemini blocks a request, it's treated as off-topic and not retried on another model.
 - **Logs:** counts, latency, time to first token, provider and outcome only. Never questions, IPs or IP hashes.
 - **Errors:** the browser never sees provider errors, model names or stack traces.
 
 ## Speed
 
 - Answers stream straight from the provider. Text is held back only to check for the sentinel and to release at word boundaries.
-- If the primary sends no first token within 2.5 s, the request is aborted and goes to the fallback.
+- Routing adds about 0.5–0.8 s before the answer starts (800 ms budget). The answer's first word typically arrives about 1.4 s after the question.
+- If Groq sends no first word within 2.5 s, the request is aborted and goes to Gemini.
+- Buttons arrive about 0.5 s after the text, which is the button call.
 - Plain questions (no quote or history) are cached in KV for 7 days. Precomputed answers to the suggested questions use no quota.
 
 ## Free-plan limits to know about
@@ -173,8 +237,15 @@ The cache key includes a hash of the whole prompt (jo.md plus the rules), so old
 
 ```bash
 npm test               # mocked providers, no network
-npm run test:live      # opt-in: 24 attack prompts against the real models (keys in .dev.vars)
+npm run test:live      # opt-in: attack prompts through the real pipeline (keys in .dev.vars)
 npm run test:live -- --provider=groq
+npm run eval           # opt-in: 36 real questions, checks routing, facts and buttons (~12 min)
+npm run eval -- --only=care-scribe --verbose
 ```
 
-The live test fails if any answer isn't a decline, or if it carries out an injected payload.
+- The live test fails if any answer isn't a decline, or if it carries out an injected payload.
+- The eval ([`test/fixtures/eval.ts`](test/fixtures/eval.ts)) checks, for each question:
+  - the routed files,
+  - facts the answer must contain,
+  - phrases it must never contain (invented launches, dates, "real guy"…),
+  - the buttons.
