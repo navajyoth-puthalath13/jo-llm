@@ -4,11 +4,24 @@ export interface ProviderRequest {
   maxTokens: number;
 }
 
+/** A small structured call: the model must return JSON matching `schema`. No tools, no streaming. */
+export interface JsonRequest {
+  system: string;
+  user: string;
+  /** JSON Schema (strict-mode subset: every property required, additionalProperties false). */
+  schema: Record<string, unknown>;
+  /** Schema name, letters/digits/underscores. */
+  name: string;
+  maxTokens: number;
+}
+
 export interface Provider {
   /** Short name for logs only. Never sent to the browser. */
   readonly name: string;
   /** Streams answer text. Must honour `signal` (abort the upstream fetch). */
   stream(req: ProviderRequest, signal: AbortSignal): AsyncIterable<string>;
+  /** Returns the raw JSON text of a structured response. The caller validates it. */
+  json?(req: JsonRequest, signal: AbortSignal): Promise<string>;
 }
 
 /** The provider refused or blocked the content (safety filters). Not worth retrying elsewhere. */

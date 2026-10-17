@@ -1,7 +1,7 @@
 // The answer pipeline: provider routing → sentinel gate → leak check → sanitizer → caller.
 // Runtime-agnostic (no Workers imports) so scripts can reuse it from Node.
 
-import { ACTION_TAG_TOKENS, createTagSplitter, parseActionTag } from "./actions";
+import { createTagSplitter } from "./actions";
 import { createStreamSanitizer, containsLeak } from "./guard/output";
 import { detectSentinel, type SentinelState } from "./guard/offtopic";
 import { openStream, RouteError } from "./providers/router";
@@ -24,8 +24,15 @@ export interface AnswerOptions {
 }
 
 export type AnswerOutcome =
-  | { ok: true; text: string; provider: string; /** Catalog ids the model chose, already validated. */ actions: string[] }
+  | { ok: true; text: string; provider: string }
   | { ok: false; code: "offtopic" | "busy"; provider?: string; partial: boolean };
+
+/** Index just after the last sentence end (".", "!", "?" or "…", plus closing quotes), or 0. */
+export function lastSentenceEnd(text: string): number {
+  let end = 0;
+  for (const m of text.matchAll(/[.!?…]+["'”’)\]]*(?=\s|$)/g)) end = m.index! + m[0].length;
+  return end;
+}
 
 export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
   const ctrl = new AbortController();
@@ -40,8 +47,7 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
     try {
       opened = await openStream(
         o.providers,
-        // A little extra room for the [[ACT:…]] tag; the visible cap below still uses maxTokens.
-        { system: o.system, user: o.user, maxTokens: o.maxTokens + ACTION_TAG_TOKENS },
+        { system: o.system, user: o.user, maxTokens: o.maxTokens },
         o.timeoutsMs,
         ctrl.signal,
         o.log,
@@ -51,28 +57,53 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
       return { ok: false, code, partial: false };
     }
     provider = opened.provider;
-    o.trace?.("8 model", `${provider} answered first: ${JSON.stringify(opened.first)}`);
+    o.trace?.("9 model", `${provider} answered first: ${JSON.stringify(opened.first)}`);
 
     const sanitizer = createStreamSanitizer(o.linkAllowlist);
-    // Everything from "[[" on is held back: the action tag (or anything else bracketed) never shows.
+    // Everything from "[[" on is held back and never shown: a guard in case a model still writes
+    // an old-style [[ACT:…]] tag or other bracketed markup.
     const splitter = createTagSplitter();
     // Full model text, tag included. Leak and sentinel checks always run on this.
     let raw = "";
     let gate: SentinelState = "pending";
     let held = "";
 
-    // ~4 characters per token: the visible answer never exceeds maxTokens, whatever the provider does.
+    // ~4 characters per token: the visible answer never exceeds maxTokens, whatever the provider
+    // does. Past three quarters of the cap, text is released only in whole sentences, so a capped
+    // answer ends at a full stop instead of mid-thought.
     const maxChars = o.maxTokens * 4;
+    const softChars = Math.floor(maxChars * 0.75);
     let capped = false;
+    let tail = "";
+    const send = async (text: string) => {
+      if (!text) return;
+      emitted += text;
+      await o.onText(text);
+    };
     const emit = async (text: string) => {
       if (!text || capped) return;
-      if (emitted.length + text.length > maxChars) {
-        text = text.slice(0, Math.max(0, maxChars - emitted.length)).replace(/\S*$/, "");
+      if (!tail && emitted.length + text.length <= softChars) return send(text);
+      tail += text;
+      const room = maxChars - emitted.length;
+      if (tail.length > room) {
+        const window = tail.slice(0, room);
+        const cut = lastSentenceEnd(window) || window.replace(/\S*$/, "").length;
+        await send(window.slice(0, cut));
+        tail = "";
         capped = true;
-        o.trace?.("9 output", "visible length cap reached, stopping");
+        o.trace?.("10 output", "length cap reached, trimmed to the last full sentence");
+        return;
       }
-      emitted += text;
-      if (text) await o.onText(text);
+      const cut = lastSentenceEnd(tail);
+      if (cut) {
+        await send(tail.slice(0, cut));
+        tail = tail.slice(cut);
+      }
+    };
+    /** At the natural end of the answer, whatever is held is a complete answer: release it. */
+    const flushTail = async () => {
+      if (!capped && tail) await send(tail);
+      tail = "";
     };
 
     /** Returns false when the answer must be replaced with a decline. */
@@ -97,8 +128,8 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
 
     const t = o.trace ?? (() => {});
     const declineWith = (why: string) => {
-      t("9 output", `raw model text: ${JSON.stringify(raw)}`);
-      t("9 output", `✗ replaced with decline (${why}); any actions dropped`);
+      t("10 output", `raw model text: ${JSON.stringify(raw)}`);
+      t("10 output", `✗ replaced with decline (${why}); any actions dropped`);
       return decline();
     };
 
@@ -117,8 +148,21 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
         }
       }
     } catch {
-      // Upstream failed or timed out mid-answer: keep what we already have.
+      // Upstream failed or timed out mid-answer. Keep what we have only if it ends at a full
+      // sentence; a half sentence ("answering from what he's shared on") is worse than the
+      // in-character "busy" line, which the client shows in place of the partial text.
       if (!emitted && !held && !raw.trim()) return { ok: false, code: "busy", provider, partial: false };
+      if (gate !== "pending") {
+        // Release everything the filters still hold, then judge the whole visible answer.
+        await emit(held + sanitizer.push(splitter.flush()) + sanitizer.flush());
+        held = "";
+        await flushTail();
+        const soFar = emitted.trim();
+        if (soFar && lastSentenceEnd(soFar) !== soFar.length) {
+          t("10 output", "stream failed mid-sentence: replaced with busy");
+          return { ok: false, code: "busy", provider, partial: true };
+        }
+      }
     }
 
     if (gate === "pending") {
@@ -127,17 +171,15 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
       return { ok: false, code: "busy", provider, partial: false };
     }
     await emit(held + sanitizer.push(splitter.flush()) + sanitizer.flush());
+    await flushTail();
     if (containsLeak(raw)) return declineWith("leak marker");
-    t("9 output", `raw model text: ${JSON.stringify(raw)}`);
-    t("9 output", `sent to browser:  ${JSON.stringify(emitted.trim())}`);
+    t("10 output", `raw model text: ${JSON.stringify(raw)}`);
+    t("10 output", `sent to browser:  ${JSON.stringify(emitted.trim())}`);
     if (!emitted.trim()) return { ok: false, code: "busy", provider, partial: false };
-    const actions = parseActionTag(splitter.held);
-    if (splitter.held) {
-      t("9 actions", actions.length ? `✓ ${actions.join(", ")} (from ${JSON.stringify(splitter.held.trim())})` : `✗ dropped ${JSON.stringify(splitter.held.trim())}`);
-    } else {
-      t("9 actions", "none");
-    }
-    return { ok: true, text: emitted.trim(), provider, actions };
+    // The answer model no longer picks buttons (see buttons.ts). Any bracketed tail it still
+    // writes was held back above and is ignored here.
+    if (splitter.held) t("10 output", `ignored a bracketed tail: ${JSON.stringify(splitter.held.trim().slice(0, 60))}`);
+    return { ok: true, text: emitted.trim(), provider };
   } finally {
     clearTimeout(total);
     o.signal.removeEventListener("abort", abort);

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { KNOWLEDGE_FILES } from "../content/knowledge/files";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -32,6 +33,7 @@ export function readDevVars(): Record<string, string> {
   return vars;
 }
 
-export function readJoMd(): string {
-  return readFileSync(join(ROOT, "content", "jo.md"), "utf8");
+/** Reads the knowledge files from disk in the same order the Worker bundles them. */
+export function readKnowledgeSources(): { path: string; text: string }[] {
+  return KNOWLEDGE_FILES.map((path) => ({ path, text: readFileSync(join(ROOT, "content", "knowledge", path), "utf8") }));
 }

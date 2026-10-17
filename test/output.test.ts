@@ -71,7 +71,7 @@ describe("visible length cap", () => {
   });
 });
 
-describe("links from jo.md", () => {
+describe("links from the knowledge files", () => {
   it("allows every link and email written in the knowledge file", async () => {
     const { linksFromKnowledge } = await import("../src/guard/output");
     const md = "Email: mailto:Me@Example.com\nLinkedIn: https://www.linkedin.com/in/me, X: https://x.com/me.\nSite: https://navajyoth.com/";
@@ -103,5 +103,37 @@ describe("spacing across stream chunks", () => {
     expect(feed(["reach ", "out ", "— ", "I'd ", "love ", "it"])).toBe("reach out, I'd love it");
     expect(feed(["see ", "https://evil.example.com ", "and ", "more"])).toBe("see and more");
     expect(feed(["Hello ", "world."])).toBe("Hello world.");
+  });
+});
+
+describe("a stream that fails mid-answer", () => {
+  const run = async (chunks: string[]) => {
+    const { generateAnswer } = await import("../src/answer");
+    const provider = {
+      name: "flaky",
+      async *stream() {
+        for (const c of chunks) yield c;
+        throw new Error("connection reset");
+      },
+    };
+    return generateAnswer({
+      providers: [provider],
+      system: "s",
+      user: "u",
+      maxTokens: 240,
+      timeoutsMs: [1000],
+      totalTimeoutMs: 5000,
+      linkAllowlist: [],
+      signal: new AbortController().signal,
+      onText: async () => {},
+    });
+  };
+
+  it("becomes busy when it stops mid-sentence", async () => {
+    expect(await run(["I'm an AI version of Navajyoth, ", "answering from what he's shared on"])).toMatchObject({ ok: false, code: "busy" });
+  });
+
+  it("keeps the answer when it stops after a full sentence", async () => {
+    expect(await run(["I'm an AI version of Navajyoth. ", "Email me."])).toMatchObject({ ok: true, text: "I'm an AI version of Navajyoth. Email me." });
   });
 });

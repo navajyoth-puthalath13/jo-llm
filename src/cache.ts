@@ -1,5 +1,5 @@
 // Answer cache in KV. Keys combine the normalised question with a hash of the full system prompt
-// (jo.md + rules) and the action catalog, so editing any of them invalidates cached answers.
+// (knowledge files + rules) and the action catalog, so editing any of them invalidates cached answers.
 // Values are JSON { text, actions }; action ids are resolved at read time, so a label or URL
 // edit in content/actions.ts shows up immediately even for cached answers.
 //

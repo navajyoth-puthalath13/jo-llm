@@ -1,7 +1,7 @@
 import { createApp } from "../src/app";
 import { loadConfig, type Env } from "../src/config";
 import { memoryLimiter } from "../src/guard/ratelimit";
-import type { Provider } from "../src/providers/types";
+import type { JsonRequest, Provider } from "../src/providers/types";
 
 export const ORIGIN = "https://navajyoth.com";
 
@@ -40,7 +40,51 @@ export function mockProvider(chunks: string[], opts: { name?: string; delayMs?: 
   return provider;
 }
 
-export function setup(opts: { providers?: Provider[]; env?: Partial<Env>; kv?: Record<string, string> } = {}) {
+/**
+ * A provider for the small structured calls (router, buttons). `reply` returns the JSON text for
+ * each request; requests are recorded so tests can check what the model saw.
+ */
+export function mockJsonProvider(
+  reply: string | ((req: JsonRequest) => string),
+  opts: { name?: string; delayMs?: number; fail?: Error } = {},
+) {
+  const calls: JsonRequest[] = [];
+  const provider: Provider & { calls: JsonRequest[] } = {
+    name: opts.name ?? "mock-json",
+    calls,
+    async *stream() {
+      throw new Error("not a streaming provider");
+    },
+    async json(req, signal) {
+      calls.push(req);
+      if (opts.delayMs) {
+        await new Promise<void>((resolve, reject) => {
+          const t = setTimeout(resolve, opts.delayMs);
+          signal.addEventListener("abort", () => {
+            clearTimeout(t);
+            reject(new Error("aborted"));
+          });
+        });
+      }
+      if (opts.fail) throw opts.fail;
+      return typeof reply === "function" ? reply(req) : reply;
+    },
+  };
+  return provider;
+}
+
+/** Routes by the request schema name: "route" calls get `route`, "buttons" calls get `buttons`. */
+export function mockUtility(route: object | null, buttons: object | null = null) {
+  return mockJsonProvider((req) => {
+    const v = req.name === "route" ? route : buttons;
+    if (v === null) throw new Error(`no mock reply for ${req.name}`);
+    return JSON.stringify(v);
+  });
+}
+
+export function setup(
+  opts: { providers?: Provider[]; utility?: Provider[]; env?: Partial<Env>; kv?: Record<string, string> } = {},
+) {
   const kv = fakeKV({ "jo:enabled": "true", ...opts.kv });
   const env: Env = {
     JO_KV: kv,
@@ -51,8 +95,11 @@ export function setup(opts: { providers?: Provider[]; env?: Partial<Env>; kv?: R
   };
   const limiter = memoryLimiter(loadConfig(env).limits);
   const providers = opts.providers ?? [mockProvider(["I design ", "and build ", "things."])];
-  const app = createApp({ limiter: () => limiter, providers: () => providers, joMd: "# Jo\nI am Jo." });
-  return { app, env, kv, limiter, providers };
+  // No utility providers by default: routing uses keywords and buttons use the fallback rules,
+  // so tests are deterministic unless they pass a mock router/button model.
+  const utility = opts.utility ?? [];
+  const app = createApp({ limiter: () => limiter, providers: () => providers, utilityProviders: () => utility });
+  return { app, env, kv, limiter, providers, utility };
 }
 
 export function ask(

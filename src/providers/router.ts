@@ -1,15 +1,27 @@
-import type { Config, ProviderName } from "../config";
+import type { Config, ModelChoice, ProviderName } from "../config";
 import { geminiProvider } from "./gemini";
-import { groqProvider } from "./groq";
+import { groqProvider, type ReasoningEffort } from "./groq";
 import { ProviderBlockedError, ProviderHttpError, type Provider, type ProviderRequest } from "./types";
 
-/** The MODELS chain, skipping any provider without a key. */
-export function defaultProviders(config: Config): Provider[] {
-  const build: Record<ProviderName, (model: string) => Provider | null> = {
-    groq: (model) => (config.groqKey ? groqProvider(config.groqKey, model) : null),
-    gemini: (model) => (config.geminiKey ? geminiProvider(config.geminiKey, model) : null),
+function build(config: Config, models: ModelChoice[], reasoning: ReasoningEffort, forAnswers: boolean): Provider[] {
+  const make: Record<ProviderName, (model: string) => Provider | null> = {
+    groq: (model) => (config.groqKey ? groqProvider(config.groqKey, model, reasoning) : null),
+    // Answers on full Gemini Flash models think a little first ("low"): in testing that kept them
+    // grounded, while Flash-Lite invented facts about things not in the files even at temperature 0.
+    gemini: (model) =>
+      config.geminiKey ? geminiProvider(config.geminiKey, model, forAnswers && !model.includes("lite") ? { thinkingLevel: "low" } : {}) : null,
   };
-  return config.models.map((m) => build[m.provider](m.model)).filter((p): p is Provider => p !== null);
+  return models.map((m) => make[m.provider](m.model)).filter((p): p is Provider => p !== null);
+}
+
+/** The answer chain (MODELS), skipping any provider without a key. */
+export function defaultProviders(config: Config): Provider[] {
+  return build(config, config.models, config.answerReasoning, true);
+}
+
+/** The router and button-picker chain (UTILITY_MODELS). */
+export function utilityProviders(config: Config): Provider[] {
+  return build(config, config.utilityModels, "low", false);
 }
 
 /** First-word deadline per provider: Groq is fast, Gemini's free tier needs longer. */
@@ -30,6 +42,12 @@ export function isCooling(name: string, now = Date.now()): boolean {
 
 export function resetCooldowns() {
   cooledUntil.clear();
+}
+
+/** Records a 429 so the model is skipped for its Retry-After (capped). */
+export function noteRateLimited(name: string, retryAfterSeconds?: number) {
+  const wait = retryAfterSeconds !== undefined ? Math.min(retryAfterSeconds * 1000, COOLDOWN_MS) : COOLDOWN_MS;
+  cooledUntil.set(name, Date.now() + wait);
 }
 
 export type RouteFailure = "busy" | "blocked";
@@ -109,10 +127,7 @@ export async function openStream(
         ctrl.abort();
         throw new RouteError("blocked");
       }
-      if (err instanceof ProviderHttpError && err.status === 429) {
-        const wait = err.retryAfterSeconds !== undefined ? Math.min(err.retryAfterSeconds * 1000, COOLDOWN_MS) : COOLDOWN_MS;
-        cooledUntil.set(provider.name, Date.now() + wait);
-      }
+      if (err instanceof ProviderHttpError && err.status === 429) noteRateLimited(provider.name, err.retryAfterSeconds);
       log(provider.name, err instanceof ProviderHttpError ? `http_${err.status}` : "error");
       ctrl.abort();
     } finally {
