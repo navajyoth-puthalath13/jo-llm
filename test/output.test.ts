@@ -82,3 +82,26 @@ describe("links from jo.md", () => {
     );
   });
 });
+
+describe("em dashes", () => {
+  it("turns em dashes into commas, in one go and while streaming", () => {
+    expect(clean("feel free to reach out—I'd love that")).toBe("feel free to reach out, I'd love that");
+    expect(clean("Jo — short for Navajyoth — designs")).toBe("Jo, short for Navajyoth, designs");
+    expect(clean("2021–2025")).toBe("2021–2025");
+    const s = createStreamSanitizer(ALLOW);
+    const out = ["reach ", "out—I'd ", "love ", "it"].map((c) => s.push(c)).join("") + s.flush();
+    expect(out).toBe("reach out, I'd love it");
+  });
+});
+
+describe("spacing across stream chunks", () => {
+  it("never leaves a space before punctuation or a double space", () => {
+    const feed = (chunks: string[]) => {
+      const s = createStreamSanitizer(ALLOW);
+      return chunks.map((c) => s.push(c)).join("") + s.flush();
+    };
+    expect(feed(["reach ", "out ", "— ", "I'd ", "love ", "it"])).toBe("reach out, I'd love it");
+    expect(feed(["see ", "https://evil.example.com ", "and ", "more"])).toBe("see and more");
+    expect(feed(["Hello ", "world."])).toBe("Hello world.");
+  });
+});

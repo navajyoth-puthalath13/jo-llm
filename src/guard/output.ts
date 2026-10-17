@@ -79,6 +79,8 @@ export function sanitizeText(text: string, allowlist: string[]): string {
 
 function tidy(s: string): string {
   return s
+    // Em dashes read as machine-written; people type commas. En dashes (ranges) are left alone.
+    .replace(/\s*—\s*/g, ", ")
     .replace(/\s*\n+\s*/g, " ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/ +([.,;:!?])/g, "$1");
@@ -99,15 +101,23 @@ export function createStreamSanitizer(allowlist: string[]): StreamSanitizer {
   let pending = "";
   let raw = "";
   let atLineStart = true;
-  let lastOut = "";
 
+  // A trailing space is held back until we see what follows it, so a removed link or a
+  // replaced em dash never leaves a double space or a space before punctuation.
+  let started = false;
+  let spaceOwed = false;
   const release = (segment: string): string => {
-    let out = tidy(filterLinks(stripMarkup(segment, atLineStart), allowlist));
-    // Nothing leading, and no double spaces where a removed link used to be.
-    if (!lastOut || /\s$/.test(lastOut)) out = out.trimStart();
-    if (out) lastOut = out;
+    const cleaned = tidy(filterLinks(stripMarkup(segment, atLineStart), allowlist));
     atLineStart = /\n\s*$/.test(segment);
-    return out;
+    const body = cleaned.trim();
+    if (!body) {
+      if (started && /\s/.test(cleaned)) spaceOwed = true;
+      return "";
+    }
+    const needsSpace = started && (spaceOwed || /^\s/.test(cleaned)) && !/^[,.;:!?)]/.test(body);
+    started = true;
+    spaceOwed = /\s$/.test(cleaned);
+    return (needsSpace ? " " : "") + body;
   };
 
   // Hold back while a markdown link or HTML tag is still open.
