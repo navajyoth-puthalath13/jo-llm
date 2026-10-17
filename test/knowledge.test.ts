@@ -75,3 +75,16 @@ describe("knowledge files", () => {
     for (const key of ["id:", "covers:", "keywords:", "actions:", "TODO:", "files.ts", "index.ts"]) expect(readme).toContain(key);
   });
 });
+
+describe("eval fixtures", () => {
+  it("only reference real files and buttons", async () => {
+    const { EVAL_CASES } = await import("./fixtures/eval");
+    const k = buildKnowledge(KNOWLEDGE_SOURCES);
+    const catalog = new Set(ACTIONS.map((a) => a.id));
+    expect(EVAL_CASES.length).toBeGreaterThanOrEqual(30);
+    for (const c of EVAL_CASES) {
+      for (const f of c.files ?? []) expect(k.routable.some((r) => r.id === f), `${c.name}: ${f}`).toBe(true);
+      for (const b of c.buttons ?? []) expect(catalog.has(b), `${c.name}: ${b}`).toBe(true);
+    }
+  });
+});
