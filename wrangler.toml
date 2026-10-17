@@ -19,7 +19,7 @@ ALLOWED_ORIGINS = "https://navajyoth.com,https://www.navajyoth.com,https://portf
 # Extra links Jo may mention, beyond the ones written in content/jo.md (those are allowed
 # automatically). Host + optional path prefix, or mailto:<address>.
 # Also covers every external button in content/actions.ts (test/actions.test.ts checks).
-LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13,x.com/putalath,mailto:navajyothputalath13@gmail.com,drive.google.com/file/d/1ljdZrg_4GmGbNfOpaENBb_9KSCI5wcXf"
+LINK_ALLOWLIST = "navajyoth.com,www.navajyoth.com,github.com/navajyoth-puthalath13,x.com/putalath,www.linkedin.com/in/navajyothp,mailto:navajyothputalath13@gmail.com,drive.google.com/file/d/19pVWr0N1-GL_lnKO11iLGKijxkJuT8qR,system-three-rouge.vercel.app,navajyothputalath13.substack.com"
 # Models to try in order, as provider:model. Each has its own free quota, so the chain adds capacity:
 # Groq models start in ~0.5s (8,000 tokens/min each ≈ 1.7 questions/min); Gemini's take 2–8s (15/min each).
 # A model that returns 429 is skipped for 30 seconds.

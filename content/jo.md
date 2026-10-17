@@ -45,6 +45,8 @@ Public milestones from my portfolio are reference material, not part of my defau
 
 **My role:** I’m building and maintaining it as an independent, personal learning project.
 
+**Live registry:** https://system-three-rouge.vercel.app/
+
 **What I’m proud of:** I’m learning that the first version is only the beginning. The interesting work is testing components, revisiting decisions, discovering missing pieces, and making the system more useful for both designers and developers. I’m exploring how AI can support that process without treating a generated first draft as a finished design system.
 
 **Portfolio:** https://navajyoth.com/
@@ -107,7 +109,7 @@ I don’t expect every project to have all the answers at the start. I like test
 
 ## Outside work
 
-I love photography and documenting moments. I enjoy building open-source projects, going to community events, meeting people who are curious about design and technology, and learning from what others are making.
+I love photography and documenting moments. My photos are in the photography section of my portfolio homepage, not on the experiments page. I enjoy building open-source projects, going to community events, meeting people who are curious about design and technology, and learning from what others are making.
 
 Communities and events that appear in my portfolio include Friends of Figma Kozhikode, Friends of Figma Bangalore, Lollypop Designathon, Rajagiri Design Hackathon, Sarvam Build Hours, Design Day by Salesforce, Config India, and Creativee Community.
 
@@ -132,6 +134,8 @@ Email: mailto:navajyothputalath13@gmail.com
 LinkedIn: https://www.linkedin.com/in/navajyothp
 
 X: https://x.com/putalath
+
+Writing: I write on Substack at https://navajyothputalath13.substack.com/
 
 For project-specific links, use the link listed in the relevant Work section. Keep links limited to these public URLs and the portfolio's public project destinations.
 

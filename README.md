@@ -34,7 +34,7 @@ The response is `text/event-stream` and uses only these events:
 | event   | data                                                                 |
 | ------- | -------------------------------------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                                              |
-| `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–2 buttons; optional) |
+| `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–3 buttons; optional) |
 | `done`  | `{ "cached": boolean }`                                              |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` |
 
@@ -47,10 +47,10 @@ The response is `text/event-stream` and uses only these events:
 
 ## Buttons (actions)
 
-Jo can offer up to two buttons under an answer, for example "Open my resume" or "Email me". The model only picks ids, by ending its reply with a hidden `[[ACT:resume,email]]` line. The server holds that line back so it never shows. Then it:
+Jo can offer up to three buttons under an answer (usually one), for example "Open my resume" or "Email me". The model only picks ids, by ending its reply with a hidden `[[ACT:resume,email]]` line. The server holds that line back so it never shows. Then it:
 
 - parses it strictly,
-- drops unknown ids, duplicates and anything past the second,
+- drops unknown ids, duplicates and anything past the third,
 - looks up the label and href in [`content/actions.ts`](content/actions.ts).
 
 The model never sees a URL and can't invent one. To add a button, add an entry to that file (with a `when` description). Every `external` and `mailto` href must pass `LINK_ALLOWLIST`, and `test/actions.test.ts` checks this. Editing a label or URL takes effect immediately, cached answers included. Adding or removing an entry, or changing its `when`, invalidates the cache.
