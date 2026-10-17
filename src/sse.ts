@@ -1,9 +1,12 @@
 // Server-sent events: writing our own stream to the browser, and reading provider streams.
 
+import type { ResolvedAction } from "./actions";
+
 export type ErrorCode = "offline" | "rate_limited" | "busy" | "invalid" | "offtopic";
 
 export type JoEvent =
   | { event: "token"; data: { t: string } }
+  | { event: "actions"; data: { actions: ResolvedAction[] } }
   | { event: "done"; data: { cached: boolean } }
   | { event: "error"; data: { code: ErrorCode } };
 
@@ -29,6 +32,8 @@ export function errorResponse(code: ErrorCode, status: number, headers: Record<s
 
 export interface EventWriter {
   token(t: string): Promise<void>;
+  /** Sent after the last token and before done, only with at least one action. Never with an error. */
+  actions(actions: ResolvedAction[]): Promise<void>;
   done(cached: boolean): Promise<void>;
   error(code: ErrorCode): Promise<void>;
   close(): Promise<void>;
@@ -47,6 +52,7 @@ export function createEventStream(): { readable: ReadableStream<Uint8Array>; wri
     readable,
     writer: {
       token: (t) => send({ event: "token", data: { t } }),
+      actions: (actions) => send({ event: "actions", data: { actions } }),
       done: (cached) => send({ event: "done", data: { cached } }),
       error: (code) => send({ event: "error", data: { code } }),
       close: async () => {

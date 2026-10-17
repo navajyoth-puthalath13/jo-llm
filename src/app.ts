@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import joMdDefault from "../content/jo.md";
 import { generateAnswer } from "./answer";
+import { catalogFingerprint, resolveActions } from "./actions";
 import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
 import { isAllowedOrigin, loadConfig, type Config, type Env } from "./config";
 import { isEnabled } from "./guard/killswitch";
@@ -133,7 +134,7 @@ export function createApp(deps: AppDeps) {
     trace("4 limits", "✓ under the per-IP limits");
 
     const cacheable = !input.quote && !input.history?.length;
-    const key = cacheable ? await cacheKey(input.question, systemPrompt) : null;
+    const key = cacheable ? await cacheKey(input.question, `${systemPrompt}\n${catalogFingerprint()}`) : null;
     if (!key) trace("5 cache", "skipped: questions with a quote or history are never cached");
 
     if (key) {
@@ -145,7 +146,9 @@ export function createApp(deps: AppDeps) {
           c,
           (async () => {
             try {
-              for (const t of chunkAnswer(hit)) await writer.token(t);
+              for (const t of chunkAnswer(hit.text)) await writer.token(t);
+              const actions = resolveActions(hit.actions);
+              if (actions.length) await writer.actions(actions);
               await writer.done(true);
             } catch {
               // client went away
@@ -203,8 +206,10 @@ export function createApp(deps: AppDeps) {
 
       try {
         if (outcome.ok) {
+          const actions = resolveActions(outcome.actions);
+          if (actions.length) await writer.actions(actions);
           await writer.done(false);
-          if (key) await putCached(c.env.JO_KV, key, outcome.text, config.cacheTtlSeconds);
+          if (key) await putCached(c.env.JO_KV, key, { text: outcome.text, actions: outcome.actions }, config.cacheTtlSeconds);
         } else {
           await writer.error(outcome.code);
         }

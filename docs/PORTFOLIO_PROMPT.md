@@ -41,6 +41,7 @@ The response is `text/event-stream` (Server-Sent Events) with exactly these even
 | event   | data                                   | meaning                                 |
 | ------- | -------------------------------------- | --------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                | append to the bubble                    |
+| `actions` | `{ "actions": [{ "id": "resume", "label": "Open my resume", "href": "https://…", "kind": "external" }] }` | 0–2 buttons to show under the answer (optional) |
 | `done`  | `{ "cached": boolean }`                | the answer is complete                  |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` | replace the bubble text with the matching line below |
 
@@ -48,9 +49,14 @@ Rules the client must follow:
 
 1. **Always read the SSE body, even when the HTTP status is not 200.** Errors that happen before streaming come back as a single `error` event, with status `400` (`invalid`), `429` (`rate_limited`) or `503` (`offline`/`busy`). Do not branch on `res.ok`.
 2. **An `error` can arrive after some `token`s.** For example, Jo started answering and the server caught something it must not say. When that happens, *replace* the bubble's text with the in-character line. Never append to it.
-3. Cached answers also arrive as `token` events, so there is only one code path.
+3. Cached answers also arrive as `token` events (and replay their `actions`), so there is only one code path.
 4. A network failure, a `403`, or a stream that ends without `done` or `error` counts as `invalid`.
 5. Abort the request (`AbortController`) on Escape, and whenever a new question is asked.
+6. `actions` arrives after the last `token` and before `done`, only when there's at least one button. It never comes with an `error`. If an `error` replaces the answer, show no buttons. Render each as a small button under the bubble text with the given `label`:
+   - `internal`: a same-tab link to that path on navajyoth.com (`/#work`, `/work/care-scribe`). Use `next/link`, and scroll for `/#…` anchors.
+   - `external`: open in a new tab with `rel="noopener noreferrer"`.
+   - `mailto`: a normal `mailto:` link.
+   - The server already validated everything, but still only render `http(s):`, `mailto:` and `/` hrefs as a second guard.
 
 ### In-character lines for error codes
 
@@ -92,8 +98,16 @@ export function checkJoStatus(): Promise<boolean> {
   return statusPromise;
 }
 
+export interface JoAction {
+  id: string;
+  label: string;
+  href: string;
+  kind: "internal" | "external" | "mailto";
+}
+
 export interface AskHandlers {
   onToken: (text: string) => void;
+  onActions: (actions: JoAction[]) => void;
   onDone: (cached: boolean) => void;
   onError: (code: JoErrorCode) => void;
 }
@@ -135,6 +149,7 @@ export async function askJo(
         const event = /^event: (.*)$/m.exec(block)?.[1];
         const data = JSON.parse(/^data: (.*)$/m.exec(block)?.[1] ?? "{}");
         if (event === "token") handlers.onToken(data.t);
+        else if (event === "actions") handlers.onActions(data.actions);
         else if (event === "done") { finished = true; handlers.onDone(data.cached); }
         else if (event === "error") { finished = true; handlers.onError(data.code); }
       }

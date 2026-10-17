@@ -4,6 +4,7 @@
 //        npm run precompute -- --dry   (print answers, write nothing)
 // Re-run after every jo.md or prompt edit + deploy: the cache key includes the prompt's hash.
 import { generateAnswer } from "../src/answer";
+import { catalogFingerprint, resolveActions } from "../src/actions";
 import { cacheKey } from "../src/cache";
 import { loadConfig } from "../src/config";
 import { linksFromKnowledge } from "../src/guard/output";
@@ -51,10 +52,12 @@ for (const question of SUGGESTED_QUESTIONS) {
     failed++;
     continue;
   }
-  console.log(`✓ ${question}\n  ${outcome.text}  (${outcome.provider})`);
+  const shown = resolveActions(outcome.actions).map((a) => `[${a.label} → ${a.href}]`).join(" ");
+  console.log(`✓ ${question}\n  ${outcome.text}  (${outcome.provider})${shown ? `\n  actions: ${shown}` : ""}`);
   if (!dry) {
-    const key = await cacheKey(question, system);
-    wrangler(kvArgs("put", key, outcome.text, `--expiration-ttl=${config.cacheTtlSeconds}`), { capture: true });
+    const key = await cacheKey(question, `${system}\n${catalogFingerprint()}`);
+    const value = JSON.stringify({ text: outcome.text, actions: outcome.actions });
+    wrangler(kvArgs("put", key, value, `--expiration-ttl=${config.cacheTtlSeconds}`), { capture: true });
   }
 }
 process.exit(failed ? 1 : 0);

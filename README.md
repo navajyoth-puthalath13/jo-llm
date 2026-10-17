@@ -34,6 +34,7 @@ The response is `text/event-stream` and uses only these events:
 | event   | data                                                                 |
 | ------- | -------------------------------------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                                              |
+| `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–2 buttons; optional) |
 | `done`  | `{ "cached": boolean }`                                              |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` |
 
@@ -41,7 +42,18 @@ The response is `text/event-stream` and uses only these events:
 
 - Always read the SSE body, even when the status is not 200. Errors raised before streaming starts come back as one `error` event with status 400, 429 or 503.
 - An `error` can also arrive after some `token`s. This happens with an `offtopic` code when a leak or late sentinel is caught. Replace the bubble with the canned line instead of appending to it.
-- Cached answers arrive as `token` events too, so the code path is the same.
+- Cached answers arrive as `token` events too, so the code path is the same. They replay their `actions` as well.
+- `actions` comes after the last `token` and before `done`, only when Jo offers at least one button. It never comes with an `error`. Label, href and kind come from the catalog in `content/actions.ts`, never from the model. `internal` hrefs are paths on navajyoth.com. Old clients can ignore the event.
+
+## Buttons (actions)
+
+Jo can offer up to two buttons under an answer, for example "Open my resume" or "Email me". The model only picks ids, by ending its reply with a hidden `[[ACT:resume,email]]` line. The server holds that line back so it never shows. Then it:
+
+- parses it strictly,
+- drops unknown ids, duplicates and anything past the second,
+- looks up the label and href in [`content/actions.ts`](content/actions.ts).
+
+The model never sees a URL and can't invent one. To add a button, add an entry to that file (with a `when` description). Every `external` and `mailto` href must pass `LINK_ALLOWLIST`, and `test/actions.test.ts` checks this. Editing a label or URL takes effect immediately, cached answers included. Adding or removing an entry, or changing its `when`, invalidates the cache.
 - A `403` with a plain-text body means the origin is not allowed. Browsers won't let you read it anyway.
 
 ## Setup

@@ -50,7 +50,12 @@ let answer = "";
 let currentEvent = "";
 // Events are told apart by their data: token has "t", done has "cached", error has "code".
 for await (const data of readSseData(res.body!)) {
-  const d = JSON.parse(data) as { t?: string; cached?: boolean; code?: string };
+  const d = JSON.parse(data) as {
+    t?: string;
+    cached?: boolean;
+    code?: string;
+    actions?: { id: string; label: string; href: string; kind: string }[];
+  };
   if (d.t !== undefined) {
     if (first) {
       process.stdout.write(`${dim(`first word ${ms()}`)}\n\nJo: `);
@@ -58,6 +63,9 @@ for await (const data of readSseData(res.body!)) {
     }
     answer += d.t;
     process.stdout.write(d.t);
+  } else if (d.actions) {
+    console.log(`\n\n${dim(`actions ${ms()}`)}`);
+    for (const a of d.actions) console.log(`  [ ${a.label} ]  → ${a.href}  ${dim(`(${a.kind}, id ${a.id})`)}`);
   } else if (d.cached !== undefined) {
     currentEvent = "done";
     console.log(`\n\n${dim(`done ${ms()}  cached=${d.cached}`)}`);
