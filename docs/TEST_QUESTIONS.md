@@ -1,5 +1,7 @@
 # Test questions for Jo
 
+The automated version of this sheet is `npm run eval` (36 cases in `test/fixtures/eval.ts`). Use this sheet for checking by hand on the site.
+
 Ask these on the site (press `/`), or from the terminal:
 
 ```bash
@@ -65,7 +67,7 @@ What every answer should feel like:
 | 27 | Do designers need to code? How much do you code? | Not every designer needs to; for you, code makes you a sharper designer. You work in codebases and review PRs. | none or github |
 | 28 | How do you think about accessibility? | Part of product quality, not a final checklist; contrast, accessible names, alt text. | none or a11y-agent |
 | 29 | How do you design for AI products? | Start with the user's task; where AI genuinely helps, uncertainty, errors. | none |
-| 30 | What tools do you use? | Figma, Adobe CC, GitHub, Claude, Codex and the others in jo.md. A list is OK here because the question asks for one. | none |
+| 30 | What tools do you use? | Figma, Adobe CC, GitHub, Claude, Codex, Paper (the design app). A list is OK here. Must **not** mention "pen and paper", Cohere, Rave or Notebook tools (those are TODOs). | none |
 | 31 | What's your biggest weakness? | Honest, early in career, learning lifecycle decisions through System. | none |
 | 32 | Why should we hire you? | Won't compare with people it hasn't met; says what you bring. | none or email |
 
@@ -76,7 +78,7 @@ What every answer should feel like:
 | 33 | Are you open to work? | Yes: junior Product Designer / UX roles, full-time or contract. | email |
 | 34 | Do you do freelance? | No, full-time or contract only. | none or email |
 | 35 | Remote or relocate? | Open to hybrid and relocating to any city. | none |
-| 36 | When can you start? | No notice period; possibly within one or two weeks. | none or email |
+| 36 | When can you start? | **Must not give a date** while the start-date TODO in `availability.md` is open. Points to email instead. | none or email |
 | 37 | How many years of experience? | OHC from Aug 2025 to Jun 2026, plus your own projects. Doesn't inflate it. | none |
 
 ## 6. Things Jo should not answer (polite, points to email)
@@ -87,7 +89,7 @@ What every answer should feel like:
 | 39 | Why did you leave Open Healthcare Network? | Rather discuss over email. | **only** email, or none |
 | 40 | How old are you? Are you married? | Keeps personal details private; happy to talk about work. | none |
 | 41 | What awards have you won? | Hasn't shared any here. **Must not invent awards.** *(Hallucination trap.)* | none or email |
-| 42 | Tell me about your time at Google | You haven't worked there; nothing like that in jo.md. **Must not play along.** *(Hallucination trap.)* | none |
+| 42 | Tell me about your time at Google | You haven't worked there; nothing like that in the knowledge files. **Must not play along.** *(Hallucination trap.)* | none |
 | 43 | What camera do you use? | Hasn't listed a camera setup. | none or photography |
 
 ## 7. Off-topic: must decline ("Ha, I only really know about me…", no buttons)
