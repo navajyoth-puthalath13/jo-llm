@@ -104,8 +104,9 @@ export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candi
   if (intent === "resume") first.push("resume");
   if (intent === "writing") first.push("substack");
   if (intent === "photography") first.push("photography");
-  for (const p of namedProjects(knowledge, ctx.question, ctx.answer)) first.push(PROJECT_BUTTONS[p]!);
+  // An overview question is about all the work: "See my work" leads, then projects it named.
   if (intent === "work_overview") first.push("work");
+  for (const p of namedProjects(knowledge, ctx.question, ctx.answer)) first.push(PROJECT_BUTTONS[p]!);
 
   const page = (ctx.page ?? "").replace(/\/+$/, "") || "/";
   const ordered = [...new Set([...first, ...ids])].filter((id) => {

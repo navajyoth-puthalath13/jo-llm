@@ -26,17 +26,16 @@ describe("button rules", () => {
   });
 
   it("a named project → that project's button first", () => {
-    expect(rules({ intent: "work_overview", question: "Tell me about Guideline Agent" }, ["work"])[0]).toBe("a11y-agent");
+    expect(rules({ intent: "project", question: "Tell me about Guideline Agent" }, ["work"])[0]).toBe("a11y-agent");
     expect(rules({ intent: "project", question: "and System?", answer: "…" }, ["care-scribe"])).toEqual(["system", "care-scribe"]);
-    // Named in the answer only: still first, after projects named in the question.
-    expect(rules({ intent: "work_overview", question: "best project?", answer: "Start with System." }, ["work"])).toEqual([
-      "system",
-      "work",
-    ]);
+    // Named in the answer only: still before the model's other picks.
+    expect(rules({ intent: "project", question: "best project?", answer: "Start with System." }, ["work"])).toEqual(["system", "work"]);
   });
 
-  it("work_overview → work", () => {
+  it("work_overview → work first, even when the answer names every project", () => {
     expect(rules({ intent: "work_overview", question: "show me your stuff", answer: "Here's my work." })).toEqual(["work"]);
+    const answer = "My main projects are System, CARE Scribe and Guideline Agent.";
+    expect(rules({ intent: "work_overview", question: "Show me all your work", answer }, [])).toEqual(["work", "system", "care-scribe"]);
   });
 
   it("private → email only, and only if the answer points to email", () => {
