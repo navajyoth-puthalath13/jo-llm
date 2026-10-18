@@ -254,13 +254,15 @@ export const USAGE_JS = `(() => {
     const live = d.jo.models.filter((n) => !state[n].backAt);
     const maxed = d.jo.models.filter((n) => state[n].backAt);
     let text, tone;
+    const backIn = (n) => short(n) + " back in " + hm(state[n].backAt - Date.now());
     if (!d.jo.enabled) { text = "Jo is switched off."; tone = "bad"; }
     else if (d.stats.jo.budgetUsed >= L.globalDailyModelCalls) { text = "Today's visitor limit is reached. Jo is resting until it resets."; tone = "bad"; }
     else if (!live.length) {
-      const soonest = Math.min(...maxed.map((n) => state[n].backAt));
-      text = "Every answer model is maxed out. Visitors see “busy” for " + hm(soonest - Date.now()) + "."; tone = "bad";
+      // Soonest first, so the first name is the one Jo will use next.
+      const next = [...maxed].sort((a, b) => state[a].backAt - state[b].backAt);
+      text = "Every answer model is maxed out, so visitors see “busy”. Next up: " + next.map(backIn).join(" · ") + "."; tone = "bad";
     } else if (maxed.length) {
-      text = maxed.map(short).join(" and ") + " maxed out. Jo is answering with " + short(live[0]) + "."; tone = "warn";
+      text = "Jo is answering with " + short(live[0]) + ". Maxed out: " + maxed.map(backIn).join(" · ") + "."; tone = "warn";
     } else { text = "All good. Jo is answering with " + short(live[0]) + "."; tone = "good"; }
     root.append(el("div", "headline " + tone, text));
 
