@@ -12,6 +12,9 @@ import type { Provider } from "./providers/types";
 import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
+/** Bump when the rules below change, so cached answers pick up the new buttons. */
+export const BUTTON_RULES_VERSION = 2;
+
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
 
