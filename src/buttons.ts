@@ -73,10 +73,14 @@ export function namedProjects(knowledge: Knowledge, question: string, answer: st
   for (const [fileId] of Object.entries(PROJECT_BUTTONS)) {
     const file = knowledge.byId.get(fileId);
     if (!file) continue;
-    // Only distinctive keywords (multi-word, or the project's own name) count as "named".
-    const names = [file.title.toLowerCase(), ...file.keywords.filter((k) => k.includes(" "))];
-    const inQuestion = names.map((n) => question.toLowerCase().indexOf(n)).filter((i) => i >= 0);
-    const inAnswer = names.map((n) => answer.toLowerCase().indexOf(n)).filter((i) => i >= 0);
+    // In the question, distinctive keywords (multi-word, or the project's own name) count as "named".
+    // In Jo's answer only the project's name counts: an answer that mentions "pull requests" while
+    // talking about how he works isn't pointing at Guideline Agent.
+    const title = file.title.toLowerCase();
+    const names = [title, ...file.keywords.filter((k) => k.includes(" "))];
+    const at = (text: string, n: string) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).exec(text.toLowerCase())?.index ?? -1;
+    const inQuestion = names.map((n) => at(question, n)).filter((i) => i >= 0);
+    const inAnswer = [at(answer, title)].filter((i) => i >= 0);
     if (inQuestion.length) found.push({ id: fileId, at: Math.min(...inQuestion) });
     else if (inAnswer.length) found.push({ id: fileId, at: 10_000 + Math.min(...inAnswer) });
   }
@@ -109,7 +113,8 @@ export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candi
   if (intent === "writing") first.push("substack");
   if (intent === "photography") first.push("photography");
   // An overview question is about all the work: "See my work" leads, then projects it named.
-  if (intent === "work_overview") first.push("work");
+  // How he works / why hire him: the answer is about all of it, so "See my work" leads too.
+  if (intent === "work_overview" || intent === "how_i_work") first.push("work");
   for (const p of namedProjects(knowledge, ctx.question, ctx.answer)) first.push(PROJECT_BUTTONS[p]!);
 
   const page = (ctx.page ?? "").replace(/\/+$/, "") || "/";
