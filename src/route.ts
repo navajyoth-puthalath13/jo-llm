@@ -52,7 +52,7 @@ const INTENT_HELP: Record<Intent, string> = {
   writing: "his writing, blog or Substack",
   photography: "his photography or photos",
   smalltalk: "greetings, thanks, small talk",
-  private: "salary, personal life, why he left a job, opinions on employers",
+  private: "salary, personal life, why he left a job, opinions on employers, and interview questions for the real him: biggest weakness or strengths, why hire him, mistakes or failures, measured impact or results, comparison with other candidates, where he sees himself",
 };
 
 function routerSystem(knowledge: Knowledge): string {
@@ -140,7 +140,7 @@ const has = (text: string, phrase: string) => text.includes(` ${phrase} `);
 const GREETING = /^\s*(hi|hii+|hey+|hello|yo|hola|namaste|good (morning|afternoon|evening)|thanks|thank you|thx|ok|okay|cool|nice)\b[\s!.?]*$/i;
 const INTENT_WORDS: [Intent, RegExp][] = [
   ["resume", /\b(resume|cv|curriculum)\b/],
-  ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left)\b/],
+  ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left|weakness(es)?|strengths?|why should (we|i) hire|why hire|mistakes?|failures?|measur\w* impact|where do you see yourself)\b/],
   ["contact", /\b(contact|reach|email|e-mail|linkedin|twitter|follow|connect|get in touch|socials?|dm|online|find you|where can i find)\b|\bon x\b/],
   ["writing", /\b(substack|blog|blogs|newsletter|articles?|do you write|writing)\b/],
   ["photography", /\b(photo|photos|photography|camera|pictures)\b/],

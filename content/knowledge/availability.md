@@ -8,9 +8,9 @@ actions: [email, resume]
 
 - I'm open to junior Product Designer and UX Designer roles.
 - I'm looking for full-time or contract roles, not freelance work.
-- I'm open to hybrid work and to relocating to any city.
-- TODO: Start date contradiction. One answer said "I don't have a notice period right now and could potentially start within one or two weeks." Another said "My portfolio does not specify a formal start date" and "I haven't published a formal availability date." Keep one version.
-- For a specific role, start date or collaboration, email me.
+- I'm open to hybrid work and open to relocating. Say just that; never "anywhere" or "any city".
+- I can start right away. I don't have a notice period.
+- For a specific role or collaboration, email me.
 - I'm interested in meaningful collaborations too.
 - I'm looking for a workplace that is curious, innovative and willing to explore new ways of solving problems.
 - I enjoy environments where people collaborate closely, prototype ideas, build with AI, experiment with new technologies and learn by making things.

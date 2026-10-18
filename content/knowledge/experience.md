@@ -2,11 +2,12 @@
 id: experience
 title: My experience
 covers: my role at Open Healthcare Network (Product Design Intern), dates, what I worked on, years of experience, outcome metrics, why healthcare
-keywords: [experience, role, intern, internship, position, title, years, worked, work experience, job, jobs, ohc, open healthcare network, care, hospital, healthcare, health, clinicians, impact, metrics, outcomes, results, numbers, domain, domains, why healthcare]
+keywords: [experience, how long, how much experience, months, role, intern, internship, position, title, years, worked, work experience, job, jobs, ohc, open healthcare network, care, hospital, healthcare, health, clinicians, impact, metrics, outcomes, results, numbers, domain, domains, why healthcare]
 actions: [care-scribe]
 ---
 
 - My role: Product Design Intern at Open Healthcare Network (OHC), from August 2025 to June 2026. Lead with this when asked about my role or experience there.
+- How long: 11 months. Say "11 months of experience", never "about a year" or "1 year".
 - At OHC I worked on CARE, an open-source hospital information system.
 - My work there touched product UX, complex hospital workflows, design-system consistency, accessibility and AI-related experiences.
 - I also explored how CARE Scribe could better support clinicians who move around during consultations.

@@ -13,7 +13,7 @@ import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
 /** Bump when the rules below change, so cached answers pick up the new buttons. */
-export const BUTTON_RULES_VERSION = 2;
+export const BUTTON_RULES_VERSION = 3;
 
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -104,6 +104,8 @@ export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candi
   // A greeting gets one gentle next step; a resume question gets exactly the resume.
   if (intent === "smalltalk") return ["about"];
   if (intent === "resume") return ["resume"];
+  // Open to work, start date, relocation: the next step is talking to him, then his resume.
+  if (intent === "availability") return ["email", "resume"];
   if (intent === "private") return mentionsEmail(ctx.answer) ? ["email"] : [];
   // Ways to reach me: email, LinkedIn and X, plus Substack when the answer talks about it.
   // Never GitHub here; code questions get it through their own intent.
@@ -146,7 +148,7 @@ export interface PickedButtons {
 export async function pickButtons(o: PickOptions): Promise<PickedButtons> {
   const { ctx } = o;
   // Some intents are fully decided by the rules; don't spend a call on them.
-  if (["smalltalk", "private", "contact", "resume"].includes(ctx.intent)) {
+  if (["smalltalk", "private", "contact", "resume", "availability"].includes(ctx.intent)) {
     return { ids: applyButtonRules(o.knowledge, ctx, []), source: "rules" };
   }
   const result = await structuredCall(
