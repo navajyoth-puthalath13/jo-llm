@@ -8,6 +8,7 @@ export const KNOWLEDGE_FILES = [
   "contact.md",
   "background.md",
   "experience.md",
+  "awards.md",
   "availability.md",
   "how-i-work.md",
   "accessibility.md",

@@ -9,6 +9,7 @@ always: true
 
 - My name is Navajyoth Putalath. People call me Jo because it's easier to say, and that's completely fine with me.
 - I'm a product designer based in Kerala, India.
+- How I describe myself: a product designer, tinkerer and builder, the person who loves to sit in between design and engineering.
 - My time zone is India Standard Time (IST, UTC+5:30).
 - I enjoy working through complex problems, understanding how products are built, and making experiences simpler for the people using them.
 - I started out in engineering and still love understanding how things are made.

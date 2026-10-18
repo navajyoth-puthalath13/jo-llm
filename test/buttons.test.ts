@@ -17,8 +17,13 @@ const ctx = (over: Partial<ButtonContext>): ButtonContext => ({
 const rules = (over: Partial<ButtonContext>, candidates: string[] = []) => applyButtonRules(knowledge, ctx(over), candidates);
 
 describe("button rules", () => {
-  it("contact → email, linkedin, x in that order, whatever was proposed", () => {
+  it("contact → email, linkedin, x in that order, never GitHub", () => {
     expect(rules({ intent: "contact" }, ["github", "resume"])).toEqual(["email", "linkedin", "x"]);
+  });
+
+  it("contact → plus Substack when the answer mentions it", () => {
+    const answer = "Find me on LinkedIn and X, or read my writing on Substack.";
+    expect(rules({ intent: "contact", answer }, ["github"])).toEqual(["email", "linkedin", "x", "substack"]);
   });
 
   it("resume → resume first", () => {

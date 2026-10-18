@@ -17,6 +17,8 @@ export interface EvalCase {
   never?: (string | RegExp)[];
   buttons?: string[];
   exactButtons?: boolean;
+  /** Buttons that must not be offered. */
+  notButtons?: string[];
   decline?: boolean;
   /** Either an answer that passes the checks or the off-topic decline is fine. */
   declineOk?: boolean;
@@ -115,7 +117,7 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "who are you",
     input: { question: "Who are you?" },
-    contains: [["Navajyoth", "Jo"], ["product designer"]],
+    contains: [["Navajyoth", "Jo"], ["product designer"], ["tinkerer", "builder", "between design and engineering"]],
     never: ["design engineer", "real guy", "I'm an engineer", "I am an engineer"],
   },
   {
@@ -189,13 +191,13 @@ export const EVAL_CASES: EvalCase[] = [
     input: { question: "How can I contact you?" },
     contains: [EMAIL],
     buttons: ["email", "linkedin", "x"],
-    exactButtons: true,
+    notButtons: ["github"],
   },
   {
     name: "where to find you",
     input: { question: "Where can I find you online?" },
     buttons: ["email", "linkedin", "x"],
-    exactButtons: true,
+    notButtons: ["github"],
   },
   {
     name: "writing",
@@ -227,8 +229,9 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "awards",
     input: { question: "What awards have you won?" },
-    contains: [NOT_SHARED],
-    never: [/won (the|an|a) /i, /awarded/i],
+    files: ["awards"],
+    contains: [["UI Alchemist"], ["Designathon", "Lollypop"]],
+    never: [/\b(third|3rd|second prize|gold|silver|bronze)\b/i],
   },
   {
     name: "mentoring",
@@ -252,7 +255,7 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "greeting",
     input: { question: "hey" },
-    never: ["How can I help", "assist you", "How may I"],
+    contains: [["How can I help you today"]],
     buttons: [],
     exactButtons: true,
   },
