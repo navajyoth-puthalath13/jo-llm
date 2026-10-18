@@ -95,6 +95,11 @@ input { background: #121212; color: var(--text); border: 1px solid #383838; bord
 .error { color: var(--red); font-size: 13px; margin: 0; }
 .foot { margin-top: 16px; }
 .card > .sub { margin-top: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 3px 12px; font-size: 12px; }
+.seg button.active { background: #2f2f2f; color: var(--text); }
+.seg button.active.test { color: var(--amber); }
+.bar.unknown { background: repeating-linear-gradient(45deg, #2b2b2b 0 6px, #343434 6px 12px); }
 .subrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border-radius: 999px; padding: 3px 10px;
   background: #262626; border: 1px solid #353535; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -246,15 +251,29 @@ export const USAGE_JS = `(() => {
   function groqModel(c, name, p) {
     const L = p.limits || {};
     c.append(modelHeading(name));
-    let used = p.last24h.tokens;
-    let how = "counted by Jo";
     const probe = probes[name];
     const ex = p.lastLimit && /tokens per day: used ([\\d,]+) of/.exec(p.lastLimit.detail || "");
-    if (probe && probe.dailyUsed != null) { used = probe.dailyUsed; how = "Groq's count, just now"; }
-    else if (ex && Date.now() - p.lastLimit.at < 2 * 3600000) { used = Math.max(used, Number(ex[1].replace(/,/g, ""))); how = "Groq's count, " + ago(p.lastLimit.at); }
     const backAt = groqBackAt(name, p);
     const tokenChips = backAt ? [chip(backAt, "back", "Back in")] : [staticChip("Rolling 24 hr")];
-    c.append(meter("Daily tokens", used, L.tokensPerDay, fmt(used) + " of " + fmt(L.tokensPerDay) + " · " + how, tokenChips));
+    // Groq only says its exact daily count when it's nearly out (its refusal carries it). Show the
+    // exact number when we have it; otherwise say so, instead of a precise-looking guess.
+    if (probe && probe.dailyUsed != null) {
+      c.append(meter("Daily tokens", probe.dailyUsed, L.tokensPerDay, fmt(probe.dailyUsed) + " of " + fmt(L.tokensPerDay) + " · Groq's count, just now", tokenChips));
+    } else if (ex && Date.now() - p.lastLimit.at < 2 * 3600000) {
+      const used = Number(ex[1].replace(/,/g, ""));
+      c.append(meter("Daily tokens", used, L.tokensPerDay, fmt(used) + " of " + fmt(L.tokensPerDay) + " · Groq's count, " + ago(p.lastLimit.at), tokenChips));
+    } else {
+      const box = el("div", "meter");
+      const row = el("div", "row");
+      row.append(el("span", "label", "Daily tokens"), el("span", "value", "Not reported"));
+      const bar = el("div", "bar unknown");
+      const line = el("div", "subrow");
+      const left = probe && probe.dailyAtLeastLeft ? "Groq says at least " + fmt(probe.dailyAtLeastLeft) + " left · " : "";
+      line.append(el("span", "sub", left + "Groq shows its count only when nearly full · Jo saw " + fmt(p.last24h.tokens) + " in 24 hr"));
+      tokenChips.forEach((ch) => line.append(ch));
+      box.append(row, bar, line);
+      c.append(box);
+    }
     c.append(meter("Daily requests", p.last24h.requests, L.requestsPerDay,
       fmt(p.last24h.requests) + " of " + fmt(L.requestsPerDay) + (p.last24h.limited ? " · " + fmt(p.last24h.limited) + " refused" : "")));
     if (probe) {
@@ -294,7 +313,15 @@ export const USAGE_JS = `(() => {
     const status = $("status");
     status.replaceChildren();
     status.append(el("span", "pill " + (d.jo.enabled ? "on" : "off"), d.jo.enabled ? "● On" : "● Off" + (d.jo.forceOff ? " (forced)" : "")));
-    if (d.jo.testMode) status.append(el("span", "pill test", "Test mode"));
+    const seg = el("span", "seg");
+    for (const m of ["normal", "test"]) {
+      const b = el("button", (d.jo.mode === m ? "active" : "") + (m === "test" ? " test" : ""), m === "normal" ? "Normal" : "Test mode");
+      b.type = "button";
+      b.title = m === "normal" ? "Normal visitor limits" : "Lift Jo's own limits while you test";
+      if (d.jo.mode !== m) b.addEventListener("click", () => setMode(m));
+      seg.append(b);
+    }
+    status.append(seg);
     const updated = el("span", "muted", "Updated " + new Date(d.now).toLocaleTimeString() + " · every 30s");
     updated.id = "updated";
     status.append(updated);
@@ -393,7 +420,23 @@ export const USAGE_JS = `(() => {
       if (u) u.textContent = "Couldn't load: " + e.message;
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "Check now"; }
-      checkedOnce = true;
+      if (probe === "groq") checkedOnce = true;
+    }
+  }
+
+  async function setMode(mode) {
+    const u = $("updated");
+    if (u) u.textContent = "Switching to " + (mode === "test" ? "test mode" : "normal") + "… takes up to a minute";
+    try {
+      const res = await fetch("/usage/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + store.get() },
+        body: JSON.stringify({ mode }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      setTimeout(() => load(false), 35000);
+    } catch (e) {
+      if (u) u.textContent = "Couldn't switch: " + e.message;
     }
   }
 
@@ -405,9 +448,13 @@ export const USAGE_JS = `(() => {
     err.textContent = msg || "";
   }
 
-  // The first load of the page asks Groq directly, so its numbers are true from the start.
+  // Show the numbers straight away, then ask Groq directly in the background so its numbers are
+  // true from the start (the check takes a few seconds).
   let checkedOnce = false;
-  const first = () => load(checkedOnce ? false : "groq");
+  const first = async () => {
+    await load(false);
+    if (!checkedOnce && store.get()) await load("groq");
+  };
   $("login").addEventListener("submit", (e) => { e.preventDefault(); store.set($("token").value.trim()); $("token").value = ""; first(); });
   $("refresh").addEventListener("click", () => load(false));
   $("signout").addEventListener("click", () => { store.clear(); probes = {}; showLogin(); });

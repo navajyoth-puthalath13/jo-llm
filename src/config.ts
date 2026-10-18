@@ -72,6 +72,8 @@ export interface Config {
   usageForwardUrl: string;
   usageForwardToken: string;
   forceOff: boolean;
+  /** "test" lifts Jo's own limits (see guard/mode.ts). Set per request from KV. */
+  mode: "normal" | "test";
   debug: boolean;
 
   limits: Limits;
@@ -179,6 +181,7 @@ export function loadConfig(env: Env): Config {
     usageForwardUrl: env.USAGE_FORWARD_URL ?? "",
     usageForwardToken: env.USAGE_FORWARD_TOKEN ?? "",
     forceOff: env.JO_FORCE_OFF === "true",
+    mode: "normal",
     debug: env.JO_DEBUG === "true",
 
     limits: {

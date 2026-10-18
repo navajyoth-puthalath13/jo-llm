@@ -93,7 +93,7 @@ export async function hashIp(ip: string, salt: string): Promise<string> {
 
 /** In-memory limiter for tests and local experiments. */
 export function memoryLimiter(
-  limits: Limits,
+  limits: Limits | (() => Limits),
   now: () => number = Date.now,
 ): Limiter & { store: Map<string, number>; usage: ReturnType<typeof memoryUsageStore> } {
   const map = new Map<string, number>();
@@ -105,8 +105,8 @@ export function memoryLimiter(
   return {
     store: map,
     usage,
-    hit: (ip) => countHit(store, ip, limits, now()),
-    spend: () => spendBudget(store, limits, now()),
+    hit: (ip) => countHit(store, ip, typeof limits === "function" ? limits() : limits, now()),
+    spend: () => spendBudget(store, typeof limits === "function" ? limits() : limits, now()),
     recordUsage: (events) => recordUsageEvents(usage, events, now()),
     stats: async (known) => ({ jo: joStatsFrom(map, now()), providers: await readProviderUsage(usage, now(), known) }),
   };

@@ -74,10 +74,13 @@ describe("usage data", () => {
     expect(raw).not.toContain("198.51.100");
   });
 
-  it("flags test mode", async () => {
-    const ctx = setup({ env: { ADMIN_TOKEN: TOKEN, PER_IP_BURST: "100000", DAILY_BUDGET: "100000" } });
-    const body = (await (await data(ctx, { Authorization: `Bearer ${TOKEN}` })).json()) as { jo: { testMode: boolean } };
-    expect(body.jo.testMode).toBe(true);
+  it("flags test mode from KV and reports its limits", async () => {
+    const ctx = setup({ env: { ADMIN_TOKEN: TOKEN }, kv: { "jo:mode": "test" } });
+    const body = (await (await data(ctx, { Authorization: `Bearer ${TOKEN}` })).json()) as {
+      jo: { testMode: boolean; mode: string; limits: { burst: number; globalDailyModelCalls: number } };
+    };
+    expect(body.jo).toMatchObject({ testMode: true, mode: "test" });
+    expect(body.jo.limits.globalDailyModelCalls).toBe(100_000);
   });
 
   it("records the model calls each question makes", async () => {
@@ -275,5 +278,40 @@ describe("usage from outside the Worker", () => {
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+});
+
+describe("mode switch", () => {
+  const switchMode = (ctx: ReturnType<typeof setup>, mode: unknown, token = TOKEN) =>
+    ctx.app.request(
+      "/usage/mode",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ mode }) },
+      ctx.env,
+    );
+
+  it("switches between normal and test with the admin token only", async () => {
+    const ctx = setup({ env: { ADMIN_TOKEN: TOKEN } });
+    expect((await switchMode(ctx, "test", "wrong")).status).toBe(401);
+    expect(ctx.kv.map.get("jo:mode")).toBeUndefined();
+    expect((await switchMode(ctx, "test")).status).toBe(200);
+    expect(ctx.kv.map.get("jo:mode")).toBe("test");
+    expect((await switchMode(ctx, "normal")).status).toBe(200);
+    expect(ctx.kv.map.get("jo:mode")).toBe("normal");
+    expect((await switchMode(ctx, "chaos")).status).toBe(400);
+  });
+
+  it("uses normal limits in normal mode and lifts them in test mode", async () => {
+    const normal = setup({ env: { PER_IP_BURST: "2" } });
+    for (let i = 0; i < 2; i++) expect((await ask(normal, { question: `normal ${i}` })).status).toBe(200);
+    expect((await ask(normal, { question: "normal 3" })).status).toBe(429);
+
+    const test = setup({ env: { PER_IP_BURST: "2" }, kv: { "jo:mode": "test" } });
+    for (let i = 0; i < 5; i++) expect((await ask(test, { question: `test ${i}` })).status).toBe(200);
+  });
+
+  it("falls back to normal when the mode can't be read", async () => {
+    const { readMode } = await import("../src/guard/mode");
+    const broken = { get: async () => { throw new Error("kv down"); } } as unknown as KVNamespace;
+    expect(await readMode(broken, 30)).toBe("normal");
   });
 });

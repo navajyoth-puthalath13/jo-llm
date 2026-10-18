@@ -4,6 +4,7 @@ import { resolveActions } from "./actions";
 import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
 import { isAllowedOrigin, loadConfig, type Config, type Env } from "./config";
 import { isEnabled } from "./guard/killswitch";
+import { applyMode, MODE_KEY, readMode } from "./guard/mode";
 import { hashIp, type Limiter } from "./guard/ratelimit";
 import { linksFromKnowledge } from "./guard/output";
 import { parseAsk, readCappedBody } from "./guard/validate";
@@ -94,7 +95,11 @@ export function createApp(deps: AppDeps) {
 
   // CORS allowlist. Unknown origins are rejected before any other work.
   app.use("*", async (c, next) => {
-    const config = loadConfig(c.env);
+    let config = loadConfig(c.env);
+    // Test or normal mode, from KV (cached ~30s), for the routes that use limits.
+    if (c.req.path === "/ask" || c.req.path.startsWith("/usage/data")) {
+      config = applyMode(config, await readMode(c.env.JO_KV, config.statusMaxAgeSeconds));
+    }
     c.set("config", config);
     const origin = c.req.header("Origin") ?? null;
     // The private usage page calls its own origin; everything else must be on the allowlist.
@@ -318,7 +323,8 @@ export function createApp(deps: AppDeps) {
         jo: {
           enabled: await isEnabled(c.env.JO_KV, config),
           forceOff: config.forceOff,
-          testMode: config.limits.burst >= 1000 || config.limits.globalDailyModelCalls >= 50_000,
+          testMode: config.mode === "test",
+          mode: config.mode,
           limits: config.limits,
           models: config.models.map(name),
           utilityModels: config.utilityModels.map(name),
@@ -332,6 +338,25 @@ export function createApp(deps: AppDeps) {
       200,
       { "Cache-Control": "no-store" },
     );
+  });
+
+  // Switch between normal and test mode from the usage page. Takes effect within ~30 seconds.
+  app.post("/usage/mode", async (c) => {
+    const config = c.get("config");
+    if (!config.adminToken) return c.text("Not found", 404);
+    if (!(await tokenMatches(c.req.header("Authorization"), config.adminToken))) {
+      return c.json({ error: "unauthorized" }, 401, { "Cache-Control": "no-store" });
+    }
+    const raw = await readCappedBody(c.req.raw, 1024);
+    let mode: unknown;
+    try {
+      mode = raw === null ? null : (JSON.parse(raw) as { mode?: unknown }).mode;
+    } catch {
+      mode = null;
+    }
+    if (mode !== "test" && mode !== "normal") return c.json({ error: "invalid" }, 400, { "Cache-Control": "no-store" });
+    await c.env.JO_KV.put(MODE_KEY, mode);
+    return c.json({ mode }, 200, { "Cache-Control": "no-store" });
   });
 
   // Laptop tests and the local dev server report the model calls they made with the same keys.

@@ -29,17 +29,16 @@ MODELS = "groq:openai/gpt-oss-120b,gemini:gemini-3.6-flash"
 UTILITY_MODELS = "groq:openai/gpt-oss-20b,gemini:gemini-3.5-flash-lite"
 # gpt-oss reasoning effort for answers: low | medium | high.
 ANSWER_REASONING = "medium"
-# ─── TEST MODE: ON ───────────────────────────────────────────────────────────────────────────
-# Limits raised to the maximum while Navajyoth tests. To switch test mode OFF, restore these
-# production values and the BURST limit below, then deploy:
-#   PER_IP_BURST = "15", PER_IP_REFILL_SECONDS = "6", PER_IP_DAILY = "150", DAILY_BUDGET = "2000",
-#   [[ratelimits]] simple = { limit = 10, period = 10 }
-# Test mode can't raise the AI providers' own free quotas (Groq ~65 answers/day on gpt-oss-120b,
-# Gemini 3.6 Flash 20/day); when those run out, Jo still says he's overloaded.
-PER_IP_BURST = "100000"
-PER_IP_REFILL_SECONDS = "1"
-PER_IP_DAILY = "100000"
-DAILY_BUDGET = "100000"
+# Per-person limits stop scripts, not conversations: a bucket of PER_IP_BURST questions that refills
+# one every PER_IP_REFILL_SECONDS, plus a daily fairness cap so one visitor can't spend everyone's quota.
+# These are the NORMAL limits. Test mode lifts them; it's switched at runtime from the usage page
+# or with `npm run jo -- test` / `npm run jo -- normal` (KV key jo:mode), no deploy needed.
+# Neither mode can raise the AI providers' own free quotas.
+PER_IP_BURST = "15"
+PER_IP_REFILL_SECONDS = "6"
+PER_IP_DAILY = "150"
+# Global model calls per day (UTC), across all visitors. Cached answers don't count.
+DAILY_BUDGET = "2000"
 # Emergency override. "true" turns Jo off regardless of KV (needs a deploy or a dashboard edit).
 JO_FORCE_OFF = "false"
 
@@ -57,12 +56,12 @@ class_name = "Limiter"
 tag = "v1"
 new_sqlite_classes = ["Limiter"]
 
-# Flood filter in front of the Durable Object. TEST MODE: raised to 1000 per 10 seconds.
-# Production value: { limit = 10, period = 10 }.
+# Flood filter in front of the Durable Object: 10 requests per 10 seconds per IP hash.
+# No person types that fast. Test mode skips it.
 [[ratelimits]]
 name = "BURST"
 namespace_id = "1001"
-simple = { limit = 1000, period = 10 }
+simple = { limit = 10, period = 10 }
 
 [observability]
 enabled = true

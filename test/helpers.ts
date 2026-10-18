@@ -93,12 +93,18 @@ export function setup(
     LINK_ALLOWLIST: "navajyoth.com,github.com/navajyoth-puthalath13,mailto:hello@navajyoth.com",
     ...opts.env,
   };
-  const limiter = memoryLimiter(loadConfig(env).limits);
+  // Like production, the limiter uses the limits of each request's config (normal or test mode).
+  let current = loadConfig(env).limits;
+  const limiter = memoryLimiter(() => current);
   const providers = opts.providers ?? [mockProvider(["I design ", "and build ", "things."])];
   // No utility providers by default: routing uses keywords and buttons use the fallback rules,
   // so tests are deterministic unless they pass a mock router/button model.
   const utility = opts.utility ?? [];
-  const app = createApp({ limiter: () => limiter, providers: () => providers, utilityProviders: () => utility });
+  const app = createApp({
+    limiter: (_env, config) => ((current = config.limits), limiter),
+    providers: () => providers,
+    utilityProviders: () => utility,
+  });
   return { app, env, kv, limiter, providers, utility };
 }
 
