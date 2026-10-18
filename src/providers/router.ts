@@ -35,9 +35,16 @@ export function firstTokenTimeouts(providers: Provider[], config: Config): numbe
 // visitor a failed round trip. Per isolate, which is enough: it's an optimisation, not a guard.
 const COOLDOWN_MS = 30_000; // without a Retry-After hint; with one, we wait what it says (capped)
 const cooledUntil = new Map<string, number>();
+// Test mode turns the skip off: every model is asked on every question, so a model that has room
+// again answers at once. The mode is one site-wide setting, so a per-isolate flag is enough.
+let cooldownsOn = true;
+
+export function setCooldowns(on: boolean) {
+  cooldownsOn = on;
+}
 
 export function isCooling(name: string, now = Date.now()): boolean {
-  return (cooledUntil.get(name) ?? 0) > now;
+  return cooldownsOn && (cooledUntil.get(name) ?? 0) > now;
 }
 
 export function resetCooldowns() {

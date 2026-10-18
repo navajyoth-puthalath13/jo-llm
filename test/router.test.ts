@@ -118,6 +118,11 @@ describe("Retry-After", () => {
     await openStream([limited, mockProvider(["ok"])], req, [1000, 1000], new AbortController().signal);
     expect(isCooling("brief", Date.now() + 1_000)).toBe(true);
     expect(isCooling("brief", Date.now() + 2_500)).toBe(false);
+    // Test mode: no skipping, every model is asked.
+    const { setCooldowns } = await import("../src/providers/router");
+    setCooldowns(false);
+    expect(isCooling("brief", Date.now() + 1_000)).toBe(false);
+    setCooldowns(true);
     resetCooldowns();
   });
 });
