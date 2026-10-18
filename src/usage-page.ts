@@ -177,25 +177,27 @@ export const USAGE_JS = `(() => {
     const L = p.limits || {};
     const probe = probes[name];
     const now = Date.now();
-    let backAt = null;
-    if (probe && probe.dailyRetryIn) {
-      const w = parseWait(probe.dailyRetryIn);
+    // Groq gives its exact daily count only when it refuses. The quick "Check" answering OK does
+    // NOT mean there's room for a real answer (an answer needs ~3,000 tokens), so a recent refusal
+    // always wins over it.
+    let used = p.last24h.tokens, exactAt = 0, backAt = null;
+    if (probe && probe.dailyUsed != null) {
+      used = probe.dailyUsed; exactAt = probesAt;
+      const w = probe.dailyRetryIn && parseWait(probe.dailyRetryIn);
       if (w != null) backAt = probesAt + w;
-    } else if (p.lastLimit && isDaily(p) && !(probe && probe.status === 200 && probesAt > p.lastLimit.at)) {
+    } else if (p.lastLimit && isDaily(p) && now - p.lastLimit.at < 6 * 3600000) {
+      const ex = /used ([\\d,]+) of/.exec(p.lastLimit.detail || "");
+      if (ex) { used = Math.max(used, Number(ex[1].replace(/,/g, ""))); exactAt = p.lastLimit.at; }
       const m = /retry in ([\\dhms.]+)/.exec(p.lastLimit.detail || "");
       const w = m && parseWait(m[1]);
       if (w != null) backAt = p.lastLimit.at + w;
     }
     if (backAt != null && backAt <= now) backAt = null;
-    if (backAt) return { pct: 100, backAt, title: "Groq is refusing new answers until then" };
-    // Exact count when Groq gave one (it only does when nearly full); otherwise what Jo counted.
-    let used = p.last24h.tokens;
-    if (probe && probe.dailyUsed != null) used = probe.dailyUsed;
-    else {
-      const ex = p.lastLimit && /used ([\\d,]+) of/.exec(p.lastLimit.detail || "");
-      if (ex && now - p.lastLimit.at < 2 * 3600000 && !(probe && probesAt > p.lastLimit.at)) used = Number(ex[1].replace(/,/g, ""));
-    }
-    return { pct: L.tokensPerDay ? (used / L.tokensPerDay) * 100 : 0, backAt: null, title: fmt(used) + " of " + fmt(L.tokensPerDay) + " tokens in the last 24 hr" };
+    const pct = L.tokensPerDay ? (used / L.tokensPerDay) * 100 : 0;
+    // Refused in the last 15 minutes and still ~full: answers will keep bouncing off it.
+    const full = !!backAt || (exactAt && now - exactAt < 15 * 60000 && pct >= 97);
+    const title = fmt(used) + " of " + fmt(L.tokensPerDay) + " tokens in the last 24 hr" + (exactAt ? " · Groq's own count, " + ago(exactAt) : " · counted by Jo");
+    return { pct: full ? 100 : pct, backAt, full, title };
   }
 
   /** Gemini: daily requests, reset at midnight UTC. */
@@ -205,7 +207,7 @@ export const USAGE_JS = `(() => {
     const dayStart = midnight - 24 * 3600000;
     const check = (d.geminiProbe || []).find((g) => g.model === name);
     const maxed = check ? check.status === 429 : !!(p.lastLimit && p.lastLimit.at >= dayStart && isDaily(p));
-    if (maxed) return { pct: 100, backAt: midnight, title: "Google is refusing new answers until midnight UTC" };
+    if (maxed) return { pct: 100, backAt: midnight, full: true, title: "Google is refusing new answers until midnight UTC" };
     const used = p.today.requests;
     return { pct: L.requestsPerDay ? (used / L.requestsPerDay) * 100 : 0, backAt: null, resetAt: midnight, title: fmt(used) + " of " + fmt(L.requestsPerDay) + " requests today" };
   }
@@ -260,15 +262,15 @@ export const USAGE_JS = `(() => {
 
     // Headline: is Jo answering, and with what.
     const L = d.jo.limits;
-    const live = d.jo.models.filter((n) => !state[n].backAt);
-    const maxed = d.jo.models.filter((n) => state[n].backAt);
+    const live = d.jo.models.filter((n) => !state[n].full);
+    const maxed = d.jo.models.filter((n) => state[n].full);
     let text, tone;
-    const backIn = (n) => short(n) + " back in " + hm(state[n].backAt - Date.now());
+    const backIn = (n) => short(n) + (state[n].backAt ? " back in " + hm(state[n].backAt - Date.now()) : " frees up gradually");
     if (!d.jo.enabled) { text = "Jo is switched off."; tone = "bad"; }
     else if (d.stats.jo.budgetUsed >= L.globalDailyModelCalls) { text = "Today's visitor limit is reached. Jo is resting until it resets."; tone = "bad"; }
     else if (!live.length) {
       // Soonest first, so the first name is the one Jo will use next.
-      const next = [...maxed].sort((a, b) => state[a].backAt - state[b].backAt);
+      const next = [...maxed].sort((a, b) => (state[a].backAt || Date.now()) - (state[b].backAt || Date.now()));
       text = "Every answer model is maxed out, so visitors see “busy”. Next up: " + next.map(backIn).join(" · ") + "."; tone = "bad";
     } else if (maxed.length) {
       text = "Jo is answering with " + short(live[0]) + ". Maxed out: " + maxed.map(backIn).join(" · ") + "."; tone = "warn";
@@ -297,7 +299,7 @@ export const USAGE_JS = `(() => {
     for (const n of groqFirst) {
       const provider = n.split(":")[0];
       const s = state[n];
-      const right = s.backAt ? countdown(s.backAt, "back") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
+      const right = s.backAt ? countdown(s.backAt, "back") : s.full ? el("span", "when back", "Full · frees up gradually") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
       const c = card((provider === "groq" ? "Groq · " : "") + short(n), provider);
       c.append(row(provider === "groq" ? "Daily tokens" : "Daily requests", "", s.pct, right, s.title, provider));
     }
