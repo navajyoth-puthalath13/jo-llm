@@ -4,7 +4,7 @@
 // textContent, never innerHTML.
 //
 // Layout follows the Claude usage panel: a one-line headline (is Jo answering, and with what), then
-// three cards (Visitors, Groq, Gemini) of rows: name · reset time · coloured % · bar. Exact counts are in each row's tooltip.
+// a Visitors card, then one card per model, each with rows: name · reset time · coloured % · bar. Exact counts are in each row's tooltip.
 
 export const USAGE_HTML = `<!doctype html>
 <html lang="en">
@@ -279,16 +279,16 @@ export const USAGE_JS = `(() => {
     visitors.append(row("Busiest visitor", "", L.daily ? (d.stats.jo.busiestVisitor / L.daily) * 100 : 0,
       countdown(midnight, "reset"), fmt(d.stats.jo.busiestVisitor) + " of " + fmt(L.daily) + " questions · " + fmt(d.stats.jo.visitorsToday) + " visitor(s) today", "jo"));
 
-    for (const [provider, title] of [["groq", "Groq"], ["gemini", "Gemini"]]) {
-      // Gemini models without a daily limit (Flash-Lite is per minute only) have nothing to fill.
-      const names = all.filter((n) => n.startsWith(provider + ":") && (provider === "groq" || (get(n).limits || {}).requestsPerDay));
-      if (!names.length) continue;
-      const c = card(title, provider);
-      for (const n of names) {
-        const s = state[n];
-        const right = s.backAt ? countdown(s.backAt, "back") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
-        c.append(row(short(n).replace(/^Gemini /, ""), "", s.pct, right, s.title, provider));
-      }
+    // One card per model: Groq gpt-oss-120b, Groq gpt-oss-20b, Gemini 3.6 Flash.
+    // Groq cards first, then Gemini. Gemini models without a daily limit (Flash-Lite is per minute
+    // only) have nothing to fill.
+    const groqFirst = [...all.filter((x) => x.startsWith("groq:")), ...all.filter((x) => !x.startsWith("groq:") && (get(x).limits || {}).requestsPerDay)];
+    for (const n of groqFirst) {
+      const provider = n.split(":")[0];
+      const s = state[n];
+      const right = s.backAt ? countdown(s.backAt, "back") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
+      const c = card((provider === "groq" ? "Groq · " : "") + short(n), provider);
+      c.append(row(provider === "groq" ? "Daily tokens" : "Daily requests", "", s.pct, right, s.title, provider));
     }
   }
 
