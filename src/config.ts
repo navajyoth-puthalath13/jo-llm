@@ -103,11 +103,13 @@ const int = (v: string | undefined, fallback: number): number => {
 // Fast Groq models first, slower Gemini models as extra capacity.
 // Answers: the strongest free models only. Groq gpt-oss-120b first (fast; 200,000 tokens a day on
 // the free tier, about 65 questions). Then Gemini 3.6 Flash with low thinking: ~2.5s to the first
-// word but grounded. Flash-Lite and gpt-oss-20b are not used for answers: in testing both invented
-// facts that weren't in the knowledge files. They only do the small structured calls.
+// word but grounded. gpt-oss-20b is the last resort, only when both are maxed out: it has its own
+// quota but invented facts more often in testing, so "busy" is the only thing it beats. Flash-Lite
+// is never used for answers (it invented projects); it only does the small structured calls.
 export const DEFAULT_MODELS: ModelChoice[] = [
   { provider: "groq", model: "openai/gpt-oss-120b" },
   { provider: "gemini", model: "gemini-3.6-flash" },
+  { provider: "groq", model: "openai/gpt-oss-20b" },
 ];
 
 // Router and button picker: small, fast, structured output (strict json_schema on Groq).
