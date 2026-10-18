@@ -6,5 +6,5 @@ keywords: [award, awards, prize, prizes, won, win, winner, winning, hackathon, d
 actions: []
 ---
 
-- First Prize, UI Alchemist Hackathon, RSET.
+- First Prize, UI Alchemist Hackathon 2025, RSET.
 - Runner-up, Designathon 2025, Lollypop Studio.
