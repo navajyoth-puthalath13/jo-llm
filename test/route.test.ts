@@ -90,6 +90,10 @@ describe("router (keyword fallback)", () => {
     ["What's your biggest weakness?", "private", []],
     ["Why should we hire you?", "private", []],
     ["Tell me about a mistake you made", "private", []],
+    ["How do you work with engineers?", "private", []],
+    ["How would you own a feature end to end?", "private", []],
+    // Recruiter basics and portfolio questions are still answered.
+    ["Are you open to full-time or contract roles?", "availability", ["availability"]],
     ["Do you write anywhere? Substack?", "writing", []],
     ["Can I see your photos?", "photography", ["outside-work"]],
     ["Are you open to work?", "availability", ["availability"]],

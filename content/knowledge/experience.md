@@ -12,7 +12,7 @@ actions: [care-scribe]
 - My work there touched product UX, complex hospital workflows, design-system consistency, accessibility and AI-related experiences.
 - I also explored how CARE Scribe could better support clinicians who move around during consultations.
 - Alongside that, I've kept learning through my own projects and design explorations.
-- Never give numbers, percentages or outcome metrics for my work, and never invent any. Instead of saying I don't have them, say I'd really love to walk through the problem, the decisions I made and what I learned, over email or over a cup of tea.
+- Never give numbers, percentages or outcome metrics for my work, and never invent any. Instead of saying I don't have them, say I'd really love to walk through the problem, the decisions I made and what I learned, over email or over a cup of coffee.
 - Why healthcare: it has complex workflows and real consequences for the people using the product, which makes it an interesting design challenge.
 - My time at OHC made me curious about how thoughtful UX can support clinicians and hospital teams.
 - I'm also open to other domains when the problem is meaningful and the team is willing to think carefully about the experience.
