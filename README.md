@@ -162,6 +162,33 @@ Before each deploy, check that the model names in `wrangler.toml` are still on t
 
 Optional: add a custom domain such as `jo.navajyoth.com` under Workers → Settings → Domains & Routes.
 
+## Private usage page
+
+`https://jo-llm.navajyothputalath13.workers.dev/usage` shows live usage and limits:
+- Jo: on/off, test mode, the answer chain,
+- Jo's own limits: questions today, busiest visitor, visitors,
+- each AI model: tokens and requests against its free limit, the last "limit reached" with the provider's own numbers, and when it resets.
+
+**Setup, once.** The page is switched off (404) until a token exists:
+
+```bash
+npx wrangler secret put ADMIN_TOKEN   # choose a long random string; you'll type it on the page
+```
+
+**Security:**
+- The page itself holds no data. `/usage/data` returns `401` without `Authorization: Bearer <ADMIN_TOKEN>`.
+- The token is checked in constant time and kept in the browser tab's `sessionStorage` only.
+- The page has a strict Content-Security-Policy, renders with `textContent` only, and never shows IP hashes.
+
+**Where the numbers come from:**
+- **Jo's limits:** exact, from the limiter Durable Object.
+- **Models:** every call Jo's Worker makes is recorded (OK or refused, tokens billed) in hourly buckets.
+  - Groq counts a rolling 24 hours.
+  - Gemini's free day resets at midnight UTC: Google's own retry times say so, even though its docs say midnight Pacific.
+- **When a provider refuses for a daily limit,** its own count ("used 198,681 of 200,000") is kept and shown instead of Jo's count.
+- **Check Groq now** asks Groq directly. It costs one request and a few dozen tokens.
+- **Not seen:** tests run from a laptop (`npm run eval`, `npm run ask` on localhost) use the same keys but aren't recorded. Provider counts are the truth when they differ.
+
 ## Kill switch
 
 ```bash

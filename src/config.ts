@@ -24,6 +24,8 @@ export interface Env {
   GEMINI_API_KEY?: string;
   GROQ_API_KEY?: string;
   IP_SALT?: string;
+  /** Opens the private usage page's data (/usage/data). Unset: the page is disabled. */
+  ADMIN_TOKEN?: string;
 
   // Vars (wrangler.toml / .dev.vars)
   ALLOWED_ORIGINS?: string;
@@ -63,6 +65,7 @@ export interface Config {
   geminiKey: string;
   groqKey: string;
   ipSalt: string;
+  adminToken: string;
   forceOff: boolean;
   debug: boolean;
 
@@ -167,6 +170,7 @@ export function loadConfig(env: Env): Config {
     geminiKey: env.GEMINI_API_KEY ?? "",
     groqKey: env.GROQ_API_KEY ?? "",
     ipSalt: env.IP_SALT ?? "",
+    adminToken: env.ADMIN_TOKEN ?? "",
     forceOff: env.JO_FORCE_OFF === "true",
     debug: env.JO_DEBUG === "true",
 

@@ -1,6 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env, RateLimitBinding } from "./config";
-import { countHit, dayKey, spendBudget, type CounterStore, type HitResult, type Limiter as LimiterApi, type Limits } from "./guard/ratelimit";
+import {
+  countHit,
+  dayKey,
+  joStatsFrom,
+  spendBudget,
+  type CounterStore,
+  type HitResult,
+  type Limiter as LimiterApi,
+  type Limits,
+  type UsageStats,
+} from "./guard/ratelimit";
+import { isStaleUsageKey, readProviderUsage, recordUsageEvents, type UsageEvent, type UsageStore } from "./usage";
 
 const CLEANUP_EVERY_MS = 60 * 60 * 1000;
 
@@ -33,6 +44,29 @@ export class Limiter extends DurableObject<Env> {
     return spendBudget(this.store(), limits, Date.now());
   }
 
+  private usageStore(): UsageStore {
+    const s = this.ctx.storage;
+    return {
+      get: (k) => s.get(k),
+      put: (k, v) => s.put(k, v),
+      list: (prefix) => s.list({ prefix }),
+    };
+  }
+
+  async recordUsage(events: UsageEvent[]): Promise<void> {
+    await this.ensureAlarm();
+    await recordUsageEvents(this.usageStore(), events, Date.now());
+  }
+
+  async stats(knownProviders: string[]): Promise<UsageStats> {
+    const now = Date.now();
+    const counters = new Map<string, number>();
+    for (const prefix of ["g:", "d:"]) {
+      for (const [k, v] of await this.ctx.storage.list<number>({ prefix })) counters.set(k, v);
+    }
+    return { jo: joStatsFrom(counters, now), providers: await readProviderUsage(this.usageStore(), now, knownProviders) };
+  }
+
   /** Deletes idle buckets and previous days so storage stays tiny. */
   async alarm() {
     const now = Date.now();
@@ -46,6 +80,9 @@ export class Limiter extends DurableObject<Env> {
       for (const [key] of await this.ctx.storage.list({ prefix })) {
         if (key.split(":")[1] !== today) stale.push(key);
       }
+    }
+    for (const [key] of await this.ctx.storage.list({ prefix: "u:" })) {
+      if (isStaleUsageKey(key, now)) stale.push(key);
     }
     for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
     await this.ctx.storage.setAlarm(now + CLEANUP_EVERY_MS);
@@ -61,5 +98,7 @@ export function durableLimiter(ns: DurableObjectNamespace<Limiter>, burst: RateL
       return stub().hit(ipHash, limits);
     },
     spend: () => stub().spend(limits),
+    recordUsage: (events) => stub().recordUsage(events),
+    stats: (known) => stub().stats(known),
   };
 }

@@ -8,6 +8,8 @@ import { hashIp, type Limiter } from "./guard/ratelimit";
 import { linksFromKnowledge } from "./guard/output";
 import { parseAsk, readCappedBody } from "./guard/validate";
 import { answerCacheScope, runJo } from "./jo";
+import { probeGroq, recordingProviders, type GroqProbe, type UsageEvent } from "./usage";
+import { USAGE_CSS, USAGE_HTML, USAGE_JS } from "./usage-page";
 import { allFacts, buildKnowledge, type KnowledgeSource } from "./knowledge";
 import { defaultProviders, utilityProviders } from "./providers/router";
 import type { Provider } from "./providers/types";
@@ -47,6 +49,16 @@ function tracer(config: Config) {
   };
 }
 
+/** Constant-time check of "Bearer <token>" against the admin token (compares SHA-256 digests). */
+async function tokenMatches(header: string | undefined, expected: string): Promise<boolean> {
+  const given = /^Bearer (.+)$/.exec(header ?? "")?.[1] ?? "";
+  const digest = async (s: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+  const [a, b] = await Promise.all([digest(given), digest(expected)]);
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0 && given.length > 0;
+}
+
 function waitUntil(c: Context<AppEnv>, p: Promise<unknown>) {
   try {
     c.executionCtx.waitUntil(p);
@@ -75,7 +87,9 @@ export function createApp(deps: AppDeps) {
     const config = loadConfig(c.env);
     c.set("config", config);
     const origin = c.req.header("Origin") ?? null;
-    if (origin !== null && !isAllowedOrigin(origin, config.allowedOrigins)) return c.text("Forbidden", 403);
+    // The private usage page calls its own origin; everything else must be on the allowlist.
+    const ownPage = c.req.path.startsWith("/usage") && origin === new URL(c.req.url).origin;
+    if (origin !== null && !ownPage && !isAllowedOrigin(origin, config.allowedOrigins)) return c.text("Forbidden", 403);
     if (origin === null && c.req.path === "/ask") return c.text("Forbidden", 403);
     c.set("origin", origin);
     await next();
@@ -165,9 +179,12 @@ export function createApp(deps: AppDeps) {
       }
     }
 
-    const providers = (deps.providers ?? defaultProviders)(config);
+    // Every model call this question makes is recorded for the private usage page.
+    const usageEvents: UsageEvent[] = [];
+    const record = (e: UsageEvent) => void usageEvents.push(e);
+    const providers = recordingProviders((deps.providers ?? defaultProviders)(config), record);
     if (providers.length === 0) return fail("busy", { reason: "no_providers" });
-    const utility = (deps.utilityProviders ?? utilityProviders)(config);
+    const utility = recordingProviders((deps.utilityProviders ?? utilityProviders)(config), record);
 
     // One visitor question is one budget unit, whatever it costs: the router and button calls
     // (small, on the utility models) ride along with the answer. Cached answers cost nothing.
@@ -220,6 +237,7 @@ export function createApp(deps: AppDeps) {
       } finally {
         await writer.close();
       }
+      if (usageEvents.length) await limiter.recordUsage(usageEvents).catch(() => {});
       trace("done", outcome.ok ? `✓ answered by ${outcome.provider}, first word at ${firstTokenMs}ms` : `→ error "${outcome.code}"`);
       logEvent({
         outcome: outcome.ok ? "ok" : outcome.code,
@@ -235,6 +253,58 @@ export function createApp(deps: AppDeps) {
     waitUntil(c, run);
 
     return new Response(readable, { headers: SSE_HEADERS });
+  });
+
+  // ── Private usage page ──────────────────────────────────────────────────────
+  // Off unless ADMIN_TOKEN is set. The page has no data in it; /usage/data needs the token.
+  const PAGE_CSP =
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  const asset = (body: string, type: string) => (c: Context<AppEnv>) => {
+    if (!c.get("config").adminToken) return c.text("Not found", 404);
+    return c.body(body, 200, { "Content-Type": type, "Content-Security-Policy": PAGE_CSP, "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
+  };
+  app.get("/usage", asset(USAGE_HTML, "text/html; charset=utf-8"));
+  app.get("/usage/app.css", asset(USAGE_CSS, "text/css; charset=utf-8"));
+  app.get("/usage/app.js", asset(USAGE_JS, "text/javascript; charset=utf-8"));
+
+  app.get("/usage/data", async (c) => {
+    const config = c.get("config");
+    if (!config.adminToken) return c.text("Not found", 404);
+    if (!(await tokenMatches(c.req.header("Authorization"), config.adminToken))) {
+      return c.json({ error: "unauthorized" }, 401, { "Cache-Control": "no-store" });
+    }
+    const now = Date.now();
+    const name = (m: { provider: string; model: string }) => `${m.provider}:${m.model}`;
+    const known = [...new Set([...config.models, ...config.utilityModels].map(name))];
+    const stats = await deps.limiter(c.env, config).stats(known);
+    let probe: GroqProbe[] | undefined;
+    if (c.req.query("probe") === "1" && config.groqKey) {
+      const groqModels = [...new Set([...config.models, ...config.utilityModels].filter((m) => m.provider === "groq").map((m) => m.model))];
+      probe = await Promise.all(
+        groqModels.map((m) => probeGroq(config.groqKey, m).catch(() => ({ model: `groq:${m}`, status: 0 }) as GroqProbe)),
+      );
+    }
+    const utcMidnight = new Date(now);
+    utcMidnight.setUTCHours(24, 0, 0, 0);
+    return c.json(
+      {
+        now,
+        jo: {
+          enabled: await isEnabled(c.env.JO_KV, config),
+          forceOff: config.forceOff,
+          testMode: config.limits.burst >= 1000 || config.limits.globalDailyModelCalls >= 50_000,
+          limits: config.limits,
+          models: config.models.map(name),
+          utilityModels: config.utilityModels.map(name),
+          answerReasoning: config.answerReasoning,
+        },
+        stats,
+        resets: { utcMidnightInMs: utcMidnight.getTime() - now },
+        probe,
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
   });
 
   app.notFound((c) => c.text("Not found", 404));
