@@ -4,7 +4,7 @@
 // textContent, never innerHTML.
 //
 // Layout follows the Claude usage panel: a one-line headline (is Jo answering, and with what), then
-// three cards (Visitors, Groq, Gemini) of rows: name · reset time · coloured % · bar. Exact counts are in each row's tooltip.
+// a Visitors card, then one card per model, each with rows: name · reset time · coloured % · bar. Exact counts are in each row's tooltip.
 
 export const USAGE_HTML = `<!doctype html>
 <html lang="en">
@@ -73,13 +73,13 @@ button:disabled { opacity: .5; cursor: default; }
 .card h2 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: 8px; vertical-align: middle; }
 .card.jo { --tone: var(--jo); } .card.groq { --tone: var(--groq); } .card.gemini { --tone: var(--gemini); }
 .card .meter:last-child { margin-bottom: 2px; }
-.meter { margin-bottom: 14px; --tone: var(--blue); }
+.meter { margin-bottom: 14px; --tone: var(--blue); display: grid; grid-template-columns: 1fr auto auto;
+  grid-template-areas: "label when pct" "bar bar bar"; align-items: baseline; column-gap: 10px; }
+.meter > .label { grid-area: label; } .meter > .when { grid-area: when; } .meter > .pct { grid-area: pct; } .meter > .bar { grid-area: bar; }
 .meter.jo { --tone: var(--jo); } .meter.groq { --tone: var(--groq); } .meter.gemini { --tone: var(--gemini); }
 .meter.warn { --tone: var(--amber); } .meter.full { --tone: var(--red); }
-.row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.label { font-size: 15px; }
-.right { display: inline-flex; align-items: baseline; gap: 10px; white-space: nowrap; }
-.when { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.label { font-size: 15px; min-width: 0; }
+.when { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .when.back { color: #f2a39d; } .when.ok { color: #8fd3a4; }
 .pct { color: var(--tone); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
 .bar { height: 10px; border-radius: 999px; margin-top: 7px; overflow: hidden; background: color-mix(in srgb, var(--tone) 18%, #1a1a1a); }
@@ -96,7 +96,16 @@ input { background: #121212; color: var(--text); border: 1px solid #383838; bord
 .seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 3px 12px; font-size: 12px; }
 .seg button.active { background: #2f2f2f; color: var(--text); }
 .seg button.active.test { color: var(--amber); }
-@media (max-width: 480px) { .row { flex-wrap: wrap; } .when { font-size: 13px; } }
+@media (max-width: 520px) {
+  main { padding: 20px 16px 40px; }
+  header h1 { font-size: 20px; }
+  .card { padding: 16px; border-radius: 14px; }
+  .headline { font-size: 14px; padding: 11px 14px; }
+  .meter { grid-template-columns: 1fr auto; grid-template-areas: "label pct" "bar bar" "when when"; }
+  .meter > .when { font-size: 13px; margin-top: 6px; white-space: normal; }
+  .status { gap: 8px; }
+  .status #updated { flex-basis: 100%; }
+}
 `;
 
 export const USAGE_JS = `(() => {
@@ -206,18 +215,18 @@ export const USAGE_JS = `(() => {
     const pct = Math.min(100, Math.round(pctExact));
     const box = el("div", "meter " + tone + (pct >= 90 ? " full" : pct >= 60 ? " warn" : ""));
     if (title) box.title = title;
-    const top = el("div", "row");
+    // Flat children so CSS can lay them out per screen: one line on desktop, and on a phone
+    // name + % on top, the bar, then the reset time underneath.
     const label = el("span", "label");
     if (tag) label.append(el("span", "tag", tag + " "));
     label.append(document.createTextNode(name));
-    const r = el("span", "right");
-    if (right) r.append(right);
-    r.append(el("span", "pct", pctExact > 0 && pctExact < 1 ? "<1%" : pct + "%"));
-    top.append(label, r);
+    const pctEl = el("span", "pct", pctExact > 0 && pctExact < 1 ? "<1%" : pct + "%");
     const bar = el("div", "bar"), fill = el("div", "fill");
     fill.style.width = (pctExact > 0 ? Math.max(1.5, Math.min(100, pctExact)) : 0) + "%";
     bar.append(fill);
-    box.append(top, bar);
+    box.append(label);
+    if (right) box.append(right);
+    box.append(pctEl, bar);
     return box;
   }
 
@@ -254,13 +263,15 @@ export const USAGE_JS = `(() => {
     const live = d.jo.models.filter((n) => !state[n].backAt);
     const maxed = d.jo.models.filter((n) => state[n].backAt);
     let text, tone;
+    const backIn = (n) => short(n) + " back in " + hm(state[n].backAt - Date.now());
     if (!d.jo.enabled) { text = "Jo is switched off."; tone = "bad"; }
     else if (d.stats.jo.budgetUsed >= L.globalDailyModelCalls) { text = "Today's visitor limit is reached. Jo is resting until it resets."; tone = "bad"; }
     else if (!live.length) {
-      const soonest = Math.min(...maxed.map((n) => state[n].backAt));
-      text = "Every answer model is maxed out. Visitors see “busy” for " + hm(soonest - Date.now()) + "."; tone = "bad";
+      // Soonest first, so the first name is the one Jo will use next.
+      const next = [...maxed].sort((a, b) => state[a].backAt - state[b].backAt);
+      text = "Every answer model is maxed out, so visitors see “busy”. Next up: " + next.map(backIn).join(" · ") + "."; tone = "bad";
     } else if (maxed.length) {
-      text = maxed.map(short).join(" and ") + " maxed out. Jo is answering with " + short(live[0]) + "."; tone = "warn";
+      text = "Jo is answering with " + short(live[0]) + ". Maxed out: " + maxed.map(backIn).join(" · ") + "."; tone = "warn";
     } else { text = "All good. Jo is answering with " + short(live[0]) + "."; tone = "good"; }
     root.append(el("div", "headline " + tone, text));
 
@@ -279,16 +290,16 @@ export const USAGE_JS = `(() => {
     visitors.append(row("Busiest visitor", "", L.daily ? (d.stats.jo.busiestVisitor / L.daily) * 100 : 0,
       countdown(midnight, "reset"), fmt(d.stats.jo.busiestVisitor) + " of " + fmt(L.daily) + " questions · " + fmt(d.stats.jo.visitorsToday) + " visitor(s) today", "jo"));
 
-    for (const [provider, title] of [["groq", "Groq"], ["gemini", "Gemini"]]) {
-      // Gemini models without a daily limit (Flash-Lite is per minute only) have nothing to fill.
-      const names = all.filter((n) => n.startsWith(provider + ":") && (provider === "groq" || (get(n).limits || {}).requestsPerDay));
-      if (!names.length) continue;
-      const c = card(title, provider);
-      for (const n of names) {
-        const s = state[n];
-        const right = s.backAt ? countdown(s.backAt, "back") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
-        c.append(row(short(n).replace(/^Gemini /, ""), "", s.pct, right, s.title, provider));
-      }
+    // One card per model: Groq gpt-oss-120b, Groq gpt-oss-20b, Gemini 3.6 Flash.
+    // Groq cards first, then Gemini. Gemini models without a daily limit (Flash-Lite is per minute
+    // only) have nothing to fill.
+    const groqFirst = [...all.filter((x) => x.startsWith("groq:")), ...all.filter((x) => !x.startsWith("groq:") && (get(x).limits || {}).requestsPerDay)];
+    for (const n of groqFirst) {
+      const provider = n.split(":")[0];
+      const s = state[n];
+      const right = s.backAt ? countdown(s.backAt, "back") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
+      const c = card((provider === "groq" ? "Groq · " : "") + short(n), provider);
+      c.append(row(provider === "groq" ? "Daily tokens" : "Daily requests", "", s.pct, right, s.title, provider));
     }
   }
 
