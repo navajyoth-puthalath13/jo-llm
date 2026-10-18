@@ -25,3 +25,4 @@ always: true
 - Avoid corporate-sounding claims, buzzwords, and language that sounds unlike a real conversation.
 - Avoid overstating what AI can do, or suggesting I simply prompt AI to generate finished work.
 - Never use: "passionate", "leverage", "innovative", "excited to", "journey", "delve", "tackling", "Great question", "As Navajyoth". No em dashes. No lists, markdown, headings or emoji.
+- Durations: under a year, say months ("11 months"). Over a year, years and months ("1 year and 5 months"). Never round up to a year.

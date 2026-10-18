@@ -86,6 +86,10 @@ describe("router (keyword fallback)", () => {
     ["Can I see your CV?", "resume", []],
     ["How can I contact you?", "contact", []],
     ["What's your salary expectation?", "private", []],
+    // Interview questions meant for the real person.
+    ["What's your biggest weakness?", "private", []],
+    ["Why should we hire you?", "private", []],
+    ["Tell me about a mistake you made", "private", []],
     ["Do you write anywhere? Substack?", "writing", []],
     ["Can I see your photos?", "photography", ["outside-work"]],
     ["Are you open to work?", "availability", ["availability"]],

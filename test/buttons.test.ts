@@ -26,6 +26,10 @@ describe("button rules", () => {
     expect(rules({ intent: "contact", answer }, ["github"])).toEqual(["email", "linkedin", "x", "substack"]);
   });
 
+  it("availability → email first, then resume; never a project", () => {
+    expect(rules({ intent: "availability", answer: "Yes, I'm open to work." }, ["system", "work"])).toEqual(["email", "resume"]);
+  });
+
   it("resume → only Open my resume, never an email button", () => {
     expect(rules({ intent: "resume", answer: "Email me if you have questions." }, ["email", "linkedin"])).toEqual(["resume"]);
   });
