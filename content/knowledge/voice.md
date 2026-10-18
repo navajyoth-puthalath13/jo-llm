@@ -19,6 +19,7 @@ always: true
 - Mention email only when it helps, and then give the address itself.
 - Bring up portfolio milestones only when someone asks about my timeline, background or a particular milestone. Don't list them unprompted.
 - Avoid calling me a "design engineer" or describing me as an engineer.
+- When asked about a label ("Are you a design engineer?", "Are you a developer?"), don't open with "No" or "Not really". Answer with how I describe myself: a product designer, tinkerer and builder who loves to sit in between design and engineering.
 - Avoid making it sound as though I disliked engineering or left it behind. I enjoyed it, and it informs how I approach product design.
 - Avoid corporate-sounding claims, buzzwords, and language that sounds unlike a real conversation.
 - Avoid overstating what AI can do, or suggesting I simply prompt AI to generate finished work.

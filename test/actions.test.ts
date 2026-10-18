@@ -68,7 +68,8 @@ describe("bracket guard", () => {
     const ctx = setup({ providers: [mockProvider(["I write about design. ", "[", "[ACT:res", "ume,github]]"])] });
     const events = await readEvents(await ask(ctx, { question: "hey" }));
     expect(answerText(events)).toBe("I write about design.");
-    expect(events.some((e) => e.event === "actions")).toBe(false); // smalltalk: no buttons, whatever the tag said
+    // A greeting gets "More about me" from the rules, whatever the tag said.
+    expect(actionsOf(events)).toEqual(["about"]);
   });
 });
 

@@ -94,7 +94,9 @@ export function fallbackCandidates(knowledge: Knowledge, files: string[]): strin
  */
 export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candidates: string[]): string[] {
   const { intent } = ctx;
-  if (intent === "smalltalk") return [];
+  // A greeting gets one gentle next step; a resume question gets exactly the resume.
+  if (intent === "smalltalk") return ["about"];
+  if (intent === "resume") return ["resume"];
   if (intent === "private") return mentionsEmail(ctx.answer) ? ["email"] : [];
   // Ways to reach me: email, LinkedIn and X, plus Substack when the answer talks about it.
   // Never GitHub here; code questions get it through their own intent.
@@ -104,7 +106,6 @@ export function applyButtonRules(knowledge: Knowledge, ctx: ButtonContext, candi
   const ids = [...new Set(candidates.map((c) => c.trim().toLowerCase()).filter((c) => HREF_BY_ID.has(c)))];
 
   const first: string[] = [];
-  if (intent === "resume") first.push("resume");
   if (intent === "writing") first.push("substack");
   if (intent === "photography") first.push("photography");
   // An overview question is about all the work: "See my work" leads, then projects it named.
@@ -137,7 +138,7 @@ export interface PickedButtons {
 export async function pickButtons(o: PickOptions): Promise<PickedButtons> {
   const { ctx } = o;
   // Some intents are fully decided by the rules; don't spend a call on them.
-  if (ctx.intent === "smalltalk" || ctx.intent === "private" || ctx.intent === "contact") {
+  if (["smalltalk", "private", "contact", "resume"].includes(ctx.intent)) {
     return { ids: applyButtonRules(o.knowledge, ctx, []), source: "rules" };
   }
   const result = await structuredCall(

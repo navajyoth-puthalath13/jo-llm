@@ -65,11 +65,11 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
    Streaming, the sentinel gate, the leak checks and the output sanitizer are unchanged. The answer is capped at 240 tokens; past three quarters of the cap, text is released only in whole sentences, so a capped answer ends at a full stop.
 3. **Buttons** ([`src/buttons.ts`](src/buttons.ts)). A structured call gets the question, Jo's final answer, the page, the intent and the catalog (ids and `when` lines, never hrefs), and proposes ids. Budget 1 s. Then fixed rules in code decide:
    - contact → `email`, `linkedin`, `x`, in that order, plus `substack` when the answer mentions it (never GitHub)
-   - resume → `resume` first
+   - resume → only `resume`
    - a named project → that project's button first
    - `work_overview` → `work`
    - private → `email` only, and only if the answer points to email
-   - small talk → none
+   - small talk → `about` ("More about me")
    - never the page the visitor is already on
    - at most 3 (4 for contact), no duplicates
 

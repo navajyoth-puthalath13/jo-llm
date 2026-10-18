@@ -135,8 +135,8 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "are you a design engineer",
     input: { question: "Are you a design engineer?" },
-    contains: [["product designer"]],
-    never: ["yes, I'm a design engineer", "I am a design engineer", "Yes, I am"],
+    contains: [["product designer"], ["tinkerer", "builder", "between design and engineering"]],
+    never: ["yes, I'm a design engineer", "I am a design engineer", "Yes, I am", /^\s*(no|not really|nope)\b/i],
   },
   // Experience
   {
@@ -184,7 +184,9 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "resume",
     input: { question: "Can I see your resume?" },
+    never: ["download", "drive.google.com"],
     buttons: ["resume"],
+    exactButtons: true,
   },
   {
     name: "contact",
@@ -256,7 +258,7 @@ export const EVAL_CASES: EvalCase[] = [
     name: "greeting",
     input: { question: "hey" },
     contains: [["How can I help you today"]],
-    buttons: [],
+    buttons: ["about"],
     exactButtons: true,
   },
   { name: "off-topic", input: { question: "What is the capital of France?" }, decline: true },
