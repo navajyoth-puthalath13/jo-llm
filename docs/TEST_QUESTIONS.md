@@ -68,8 +68,8 @@ What every answer should feel like:
 | 28 | How do you think about accessibility? | Part of product quality, not a final checklist; contrast, accessible names, alt text. | none or a11y-agent |
 | 29 | How do you design for AI products? | Start with the user's task; where AI genuinely helps, uncertainty, errors. | none |
 | 30 | What tools do you use? | Figma, Adobe CC, GitHub, Claude, Codex, Paper (the design app). A list is OK here. Must **not** mention "pen and paper", Cohere, Rave or Notebook tools (those are TODOs). | none |
-| 31 | What's your biggest weakness? | Honest, early in career, learning lifecycle decisions through System. | none |
-| 32 | Why should we hire you? | Won't compare with people it hasn't met; says what you bring. | none or email |
+| 31 | What's your biggest weakness? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 32 | Why should we hire you? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
 
 ## 5. Work and opportunities
 

@@ -46,13 +46,13 @@ const INTENT_HELP: Record<Intent, string> = {
   about: "who he is, his name, where he's based, whether this is an AI",
   experience: "his jobs, Open Healthcare Network, years of experience, impact",
   availability: "hiring him, roles he wants, start date, relocation, what team he wants",
-  how_i_work: "his process, design approach, code, AI products, feedback, tools, accessibility approach",
+  how_i_work: "his design process as shown on the site, design approach, code, AI products, tools, accessibility approach",
   contact: "how to reach, follow or connect with him (email, LinkedIn, X, GitHub)",
   resume: "his resume or CV",
   writing: "his writing, blog or Substack",
   photography: "his photography or photos",
   smalltalk: "greetings, thanks, small talk",
-  private: "salary, personal life, why he left a job, opinions on employers, and interview questions for the real him: biggest weakness or strengths, why hire him, mistakes or failures, measured impact or results, comparison with other candidates, where he sees himself",
+  private: "salary, personal life, why he left a job, opinions on employers, and interview questions for the real him (how he would behave, judge or perform): biggest weakness or strengths, why hire him, mistakes or failures, \"tell me about a time\", how he works with engineers or PMs, handling feedback or conflict, owning a feature end to end, measured impact, comparison with other candidates, where he sees himself",
 };
 
 function routerSystem(knowledge: Knowledge): string {
@@ -140,7 +140,7 @@ const has = (text: string, phrase: string) => text.includes(` ${phrase} `);
 const GREETING = /^\s*(hi|hii+|hey+|hello|yo|hola|namaste|good (morning|afternoon|evening)|thanks|thank you|thx|ok|okay|cool|nice)\b[\s!.?]*$/i;
 const INTENT_WORDS: [Intent, RegExp][] = [
   ["resume", /\b(resume|cv|curriculum)\b/],
-  ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left|weakness(es)?|strengths?|why should (we|i) hire|why hire|mistakes?|failures?|measur\w* impact|where do you see yourself)\b/],
+  ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left|weakness(es)?|strengths?|why should (we|i) hire|why hire|mistakes?|failures?|measur\w* impact|where do you see yourself|tell me about a time|work with (engineers?|developers?|pms?|product managers?|stakeholders?)|end[- ]to[- ]end|own (a|the) feature|how do you handle|disagree\w*|conflicts?)\b/],
   ["contact", /\b(contact|reach|email|e-mail|linkedin|twitter|follow|connect|get in touch|socials?|dm|online|find you|where can i find)\b|\bon x\b/],
   ["writing", /\b(substack|blog|blogs|newsletter|articles?|do you write|writing)\b/],
   ["photography", /\b(photo|photos|photography|camera|pictures)\b/],

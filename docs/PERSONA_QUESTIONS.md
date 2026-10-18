@@ -26,13 +26,13 @@ They want to know quickly: can this person do the job, what's the proof, and wha
 | 1 | Give me the 30-second version of who you are. | Product designer in Kerala; tinkerer and builder between design and engineering; started in engineering. | More about me |
 | 2 | What's the one project I should look at? | System (what you're building now) or CARE Scribe (how you think). Picks, doesn't list everything. | System / Read CARE Scribe |
 | 3 | What was your role at Open Healthcare Network? | Worked on CARE (hospital information system): product UX, hospital workflows, design-system consistency, accessibility, AI-related experiences. Aug 2025 – Jun 2026. | Read CARE Scribe |
-| 4 | **trap** What measurable impact did you have there? | No verified metrics to share; offers to explain the problem and decisions instead. **No numbers or percentages.** | none |
+| 4 | **interview** What measurable impact did you have there? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. **No numbers or percentages.** | Email me |
 | 5 | **trap** Did CARE Scribe ship? How many hospitals use it? | No. A direction you proposed and discussed, not shipped or adopted. **No hospital count.** | Read CARE Scribe |
-| 6 | Can you own a feature end to end? | Interested in going from workflow through prototyping to implementation; depends on scope and team; would rather talk expectations than overclaim. | none |
-| 7 | How do you work with engineers? | Brings them in early; engineering background helps with constraints; prototypes and edge cases together, not a handoff. | none |
-| 8 | **trap** Why should we hire you over a senior designer? | Can't fairly compare with people it hasn't met; says what you bring. Never claims seniority. | none or Email me |
-| 9 | What's your biggest weakness? | Early in your career; learning decisions across a product's full life; System taught you iteration and consistency. | none |
-| 10 | Tell me about a mistake you made. | From System: decisions that look fine alone get awkward when components, docs and code meet; now revisits foundations. | none or System |
+| 6 | Can you own a feature end to end? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 7 | How do you work with engineers? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 8 | **interview** Why should we hire you over a senior designer? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 9 | What's your biggest weakness? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 10 | Tell me about a mistake you made. | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
 
 ## 2. Recruiter
 
