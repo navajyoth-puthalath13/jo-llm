@@ -8,12 +8,19 @@ export type ReasoningEffort = "low" | "medium" | "high";
 const REASONING_HEADROOM: Record<ReasoningEffort, number> = { low: 600, medium: 1500, high: 3000 };
 const URL = "https://api.groq.com/openai/v1/chat/completions";
 
+interface GroqUsage {
+  total_tokens?: number;
+}
+
 interface GroqChunk {
   choices?: { delta?: { content?: string } }[];
+  usage?: GroqUsage;
+  x_groq?: { usage?: GroqUsage };
 }
 
 interface GroqMessage {
   choices?: { message?: { content?: string } }[];
+  usage?: GroqUsage;
 }
 
 export function groqProvider(apiKey: string, model: string, reasoningEffort: ReasoningEffort = "low"): Provider {
@@ -27,6 +34,8 @@ export function groqProvider(apiKey: string, model: string, reasoningEffort: Rea
         body: JSON.stringify({
           model,
           stream: true,
+          // The last chunk then carries the token count, for the private usage page.
+          stream_options: { include_usage: true },
           temperature: 0.4,
           // The visible answer is capped separately in answer.ts.
           max_completion_tokens: req.maxTokens + REASONING_HEADROOM[reasoningEffort],
@@ -39,12 +48,15 @@ export function groqProvider(apiKey: string, model: string, reasoningEffort: Rea
           ],
         }),
       });
-      if (!res.ok || !res.body) throw httpError(res);
+      if (!res.ok || !res.body) throw await httpError(res);
 
       for await (const data of readSseData(res.body)) {
         if (data === "[DONE]") return;
         try {
-          const text = (JSON.parse(data) as GroqChunk).choices?.[0]?.delta?.content;
+          const chunk = JSON.parse(data) as GroqChunk;
+          const usage = chunk.usage?.total_tokens ?? chunk.x_groq?.usage?.total_tokens;
+          if (usage) req.onUsage?.(usage);
+          const text = chunk.choices?.[0]?.delta?.content;
           if (text) yield text;
         } catch {
           // ignore keep-alives and malformed lines
@@ -70,8 +82,10 @@ export function groqProvider(apiKey: string, model: string, reasoningEffort: Rea
           ],
         }),
       });
-      if (!res.ok) throw httpError(res);
-      const content = ((await res.json()) as GroqMessage).choices?.[0]?.message?.content;
+      if (!res.ok) throw await httpError(res);
+      const body = (await res.json()) as GroqMessage;
+      if (body.usage?.total_tokens) req.onUsage?.(body.usage.total_tokens);
+      const content = body.choices?.[0]?.message?.content;
       if (!content) throw new Error("empty structured response");
       return content;
     },

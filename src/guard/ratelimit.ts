@@ -10,6 +10,7 @@
 // is slowed to one question per refill interval, and nobody is ever locked out for minutes.
 
 import type { Limits } from "../config";
+import { memoryUsageStore, readProviderUsage, recordUsageEvents, type ProviderUsage, type UsageEvent } from "../usage";
 export type { Limits };
 
 export type HitResult = "ok" | "rate_limited";
@@ -19,6 +20,40 @@ export interface Limiter {
   hit(ipHash: string): Promise<HitResult>;
   /** Reserves one model call from the global daily budget. False when the budget is spent. */
   spend(): Promise<boolean>;
+  /** Records the model calls one question made (for the private usage page). */
+  recordUsage(events: UsageEvent[]): Promise<void>;
+  /** Totals for the private usage page. Never includes IP hashes. */
+  stats(knownProviders: string[]): Promise<UsageStats>;
+}
+
+export interface JoStats {
+  /** UTC day the budget and per-person daily counts belong to. */
+  day: string;
+  budgetUsed: number;
+  visitorsToday: number;
+  /** Questions from the busiest visitor today (a number only, never who). */
+  busiestVisitor: number;
+}
+
+export interface UsageStats {
+  jo: JoStats;
+  providers: ProviderUsage[];
+}
+
+/** Today's totals from the counter entries (g:<day> and d:<day>:<ipHash>). */
+export function joStatsFrom(entries: Iterable<[string, number]>, now: number): JoStats {
+  const day = dayKey(now);
+  let budgetUsed = 0;
+  let visitorsToday = 0;
+  let busiestVisitor = 0;
+  for (const [key, value] of entries) {
+    if (key === `g:${day}`) budgetUsed = value;
+    else if (key.startsWith(`d:${day}:`)) {
+      visitorsToday += 1;
+      busiestVisitor = Math.max(busiestVisitor, value);
+    }
+  }
+  return { day, budgetUsed, visitorsToday, busiestVisitor };
 }
 
 /** Minimal storage surface shared by Durable Object storage and the in-memory test store. */
@@ -57,15 +92,22 @@ export async function hashIp(ip: string, salt: string): Promise<string> {
 }
 
 /** In-memory limiter for tests and local experiments. */
-export function memoryLimiter(limits: Limits, now: () => number = Date.now): Limiter & { store: Map<string, number> } {
+export function memoryLimiter(
+  limits: Limits,
+  now: () => number = Date.now,
+): Limiter & { store: Map<string, number>; usage: ReturnType<typeof memoryUsageStore> } {
   const map = new Map<string, number>();
   const store: CounterStore = {
     get: async (k) => map.get(k),
     put: async (k, v) => void map.set(k, v),
   };
+  const usage = memoryUsageStore();
   return {
     store: map,
+    usage,
     hit: (ip) => countHit(store, ip, limits, now()),
     spend: () => spendBudget(store, limits, now()),
+    recordUsage: (events) => recordUsageEvents(usage, events, now()),
+    stats: async (known) => ({ jo: joStatsFrom(map, now()), providers: await readProviderUsage(usage, now(), known) }),
   };
 }

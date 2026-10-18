@@ -14,6 +14,7 @@ const SAFETY_SETTINGS = [
 
 interface GeminiChunk {
   promptFeedback?: { blockReason?: string };
+  usageMetadata?: { totalTokenCount?: number };
   candidates?: {
     finishReason?: string;
     content?: { parts?: { text?: string; thought?: boolean }[] };
@@ -54,7 +55,7 @@ export function geminiProvider(apiKey: string, model: string, opts: GeminiOption
           safetySettings: SAFETY_SETTINGS,
         }),
       });
-      if (!res.ok || !res.body) throw httpError(res);
+      if (!res.ok || !res.body) throw await httpError(res);
 
       for await (const data of readSseData(res.body)) {
         let chunk: GeminiChunk;
@@ -64,6 +65,7 @@ export function geminiProvider(apiKey: string, model: string, opts: GeminiOption
           continue;
         }
         if (chunk.promptFeedback?.blockReason) throw new ProviderBlockedError();
+        if (chunk.usageMetadata?.totalTokenCount) req.onUsage?.(chunk.usageMetadata.totalTokenCount);
         const cand = chunk.candidates?.[0];
         for (const part of cand?.content?.parts ?? []) {
           if (part.text && !part.thought) yield part.text;
@@ -91,9 +93,10 @@ export function geminiProvider(apiKey: string, model: string, opts: GeminiOption
           safetySettings: SAFETY_SETTINGS,
         }),
       });
-      if (!res.ok) throw httpError(res);
+      if (!res.ok) throw await httpError(res);
       const body = (await res.json()) as GeminiChunk;
       if (body.promptFeedback?.blockReason) throw new ProviderBlockedError();
+      if (body.usageMetadata?.totalTokenCount) req.onUsage?.(body.usageMetadata.totalTokenCount);
       const text = (body.candidates?.[0]?.content?.parts ?? [])
         .filter((p) => p.text && !p.thought)
         .map((p) => p.text)
