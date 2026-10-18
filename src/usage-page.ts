@@ -92,10 +92,22 @@ form { background: var(--card); border: 1px solid var(--line); border-radius: 16
 input { background: #121212; color: var(--text); border: 1px solid #383838; border-radius: 10px; padding: 10px 12px; font: inherit; }
 .error { color: var(--red); font-size: 13px; margin: 0; }
 .foot { margin-top: 16px; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-.seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 3px 12px; font-size: 12px; }
-.seg button.active { background: #2f2f2f; color: var(--text); }
-.seg button.active.test { color: var(--amber); }
+.mode-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.card.mode h2 { margin: 0; }
+.toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: #141414; border: 1px solid #333;
+  border-radius: 999px; padding: 3px; min-width: 220px; }
+.toggle .thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px;
+  background: #3a3a3a; transition: transform .25s ease, background .25s ease; }
+.toggle.is-test .thumb { transform: translateX(100%); background: #5a4520; }
+.toggle button { position: relative; z-index: 1; background: transparent; border: 0; border-radius: 999px; padding: 7px 14px;
+  font-size: 14px; color: var(--muted); transition: color .25s ease; }
+.toggle button:hover { background: transparent; color: var(--text); }
+.toggle button.on { color: var(--text); font-weight: 600; }
+.toggle.is-test button.on { color: #ffd88a; }
+.toggle button:disabled { opacity: 1; cursor: progress; }
+.mode-say { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+.mode-note { font-size: 13px; margin: 6px 0 0; }
+.mode-note.saving { color: var(--muted); } .mode-note.saved { color: #8fd3a4; } .mode-note.error { color: #f2a39d; }
 @media (max-width: 520px) {
   main { padding: 20px 16px 40px; }
   header h1 { font-size: 20px; }
@@ -104,7 +116,7 @@ input { background: #121212; color: var(--text); border: 1px solid #383838; bord
   .meter { grid-template-columns: 1fr auto; grid-template-areas: "label pct" "bar bar" "when when"; }
   .meter > .when { font-size: 13px; margin-top: 6px; white-space: normal; }
   .status { gap: 8px; }
-  .status #updated { flex-basis: 100%; }
+  .mode-top { flex-wrap: wrap; } .toggle { min-width: 0; width: 100%; }
 }
 `;
 
@@ -239,15 +251,11 @@ export const USAGE_JS = `(() => {
     const status = $("status");
     status.replaceChildren();
     status.append(el("span", "pill " + (d.jo.enabled ? "on" : "off"), d.jo.enabled ? "● On" : "● Off" + (d.jo.forceOff ? " (forced)" : "")));
-    const seg = el("span", "seg");
-    for (const m of ["normal", "test"]) {
-      const b = el("button", (d.jo.mode === m ? "active" : "") + (m === "test" ? " test" : ""), m === "normal" ? "Normal" : "Test mode");
-      b.type = "button";
-      b.title = m === "normal" ? "Normal visitor limits" : "Lift Jo's own limits while you test";
-      if (d.jo.mode !== m) b.addEventListener("click", () => setMode(m));
-      seg.append(b);
-    }
-    status.append(seg);
+    // The mode the page shows: the one just clicked, until the server reports it (KV takes up to a
+    // minute to agree everywhere), so the switch never jumps back.
+    if (pending && (d.jo.mode === pending.mode || Date.now() - pending.at > 90000)) pending = null;
+    const mode = pending ? pending.mode : d.jo.mode;
+    if (mode === "test") status.append(el("span", "pill test", "Test mode"));
     const updated = el("span", "muted", "Updated " + new Date(d.now).toLocaleTimeString());
     updated.id = "updated";
     status.append(updated);
@@ -276,6 +284,7 @@ export const USAGE_JS = `(() => {
       text = "Jo is answering with " + short(live[0]) + ". Maxed out: " + maxed.map(backIn).join(" · ") + "."; tone = "warn";
     } else { text = "All good. Jo is answering with " + short(live[0]) + "."; tone = "good"; }
     root.append(el("div", "headline " + tone, text));
+    root.append(modeCard(mode, d.jo.normalLimits || d.jo.limits));
 
     // Three cards: Visitors (Jo's own limits), Groq (both models), Gemini.
     const card = (title, cls) => {
@@ -317,6 +326,7 @@ export const USAGE_JS = `(() => {
       if (d.probe) { probes = Object.fromEntries(d.probe.map((p) => [p.model, p])); probesAt = Date.now(); }
       $("login").hidden = true;
       $("content").hidden = false;
+      lastData = d;
       render(d);
     } catch (e) {
       const u = $("updated");
@@ -327,9 +337,43 @@ export const USAGE_JS = `(() => {
     }
   }
 
+  // Normal | Test mode switch: a sliding toggle that moves the moment it's clicked.
+  let pending = null; // { mode, at, state: "saving" | "saved" | "error", error? }
+  let lastData = null;
+  function modeCard(mode, L) {
+    const c = el("section", "card mode");
+    const top = el("div", "mode-top");
+    const h = el("h2", null, "Mode");
+    const t = el("div", "toggle" + (mode === "test" ? " is-test" : ""));
+    t.setAttribute("role", "radiogroup");
+    t.setAttribute("aria-label", "Mode");
+    t.append(el("span", "thumb"));
+    for (const m of ["normal", "test"]) {
+      const b = el("button", m === mode ? "on" : "", m === "normal" ? "Normal" : "Test mode");
+      b.type = "button";
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(m === mode));
+      b.disabled = !!(pending && pending.state === "saving");
+      if (m !== mode) b.addEventListener("click", () => setMode(m));
+      t.append(b);
+    }
+    top.append(h, t);
+    c.append(top);
+    c.append(el("p", "mode-say", mode === "test"
+      ? "No visitor limits. Anyone can ask as much as they like. Groq and Gemini's own daily limits still apply."
+      : "Visitor limits on: " + L.burst + " questions at once, then 1 more every " + L.refillSeconds + "s, up to " + L.daily + " a day each."));
+    if (pending) {
+      const note = pending.state === "saving" ? ["saving", "Saving…"]
+        : pending.state === "error" ? ["error", "Couldn't switch: " + pending.error]
+        : ["saved", "✓ Saved. Live for every visitor within a minute."];
+      c.append(el("p", "mode-note " + note[0], note[1]));
+    }
+    return c;
+  }
+
   async function setMode(mode) {
-    const u = $("updated");
-    if (u) u.textContent = "Switching to " + (mode === "test" ? "test mode" : "normal") + "… takes up to a minute";
+    pending = { mode, at: Date.now(), state: "saving" };
+    if (lastData) render(lastData);
     try {
       const res = await fetch("/usage/mode", {
         method: "POST",
@@ -337,10 +381,11 @@ export const USAGE_JS = `(() => {
         body: JSON.stringify({ mode }),
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
-      setTimeout(() => load(false), 35000);
+      pending = { mode, at: Date.now(), state: "saved" };
     } catch (e) {
-      if (u) u.textContent = "Couldn't switch: " + e.message;
+      pending = { mode: lastData ? lastData.jo.mode : mode, at: Date.now(), state: "error", error: e.message };
     }
+    if (lastData) render(lastData);
   }
 
   function showLogin(msg) {

@@ -77,10 +77,12 @@ describe("usage data", () => {
   it("flags test mode from KV and reports its limits", async () => {
     const ctx = setup({ env: { ADMIN_TOKEN: TOKEN }, kv: { "jo:mode": "test" } });
     const body = (await (await data(ctx, { Authorization: `Bearer ${TOKEN}` })).json()) as {
-      jo: { testMode: boolean; mode: string; limits: { burst: number; globalDailyModelCalls: number } };
+      jo: { testMode: boolean; mode: string; limits: { burst: number; globalDailyModelCalls: number }; normalLimits: { daily: number } };
     };
     expect(body.jo).toMatchObject({ testMode: true, mode: "test" });
     expect(body.jo.limits.globalDailyModelCalls).toBe(100_000);
+    // What Normal would apply, so the page can describe it before switching back.
+    expect(body.jo.normalLimits.daily).toBe(150);
   });
 
   it("records the model calls each question makes", async () => {
