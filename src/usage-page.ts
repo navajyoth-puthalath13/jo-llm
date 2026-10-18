@@ -106,6 +106,7 @@ input { background: #121212; color: var(--text); border: 1px solid #383838; bord
 .toggle.is-test button.on { color: #ffd88a; }
 .toggle button:disabled { opacity: 1; cursor: progress; }
 .mode-say { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+.mode-list { color: var(--muted); font-size: 13px; margin: 12px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 .toggle.switching .thumb { animation: pulse 1.2s ease-in-out infinite; }
 .toggle button:disabled { cursor: progress; }
 .switching-box { margin-top: 12px; }
@@ -299,7 +300,7 @@ export const USAGE_JS = `(() => {
       text = "Jo is answering with " + short(live[0]) + ". Maxed out: " + maxed.map(backIn).join(" · ") + "."; tone = "warn";
     } else { text = "All good. Jo is answering with " + short(live[0]) + "."; tone = "good"; }
     root.append(el("div", "headline " + tone, text));
-    root.append(modeCard(mode, d.jo.normalLimits || d.jo.limits));
+    root.append(modeCard(mode, d.jo.normalLimits || d.jo.limits, d.jo.models.map(short)));
 
     // Three cards: Visitors (Jo's own limits), Groq (both models), Gemini.
     const card = (title, cls) => {
@@ -363,7 +364,7 @@ export const USAGE_JS = `(() => {
   let poll = null;
   const MODE_NAME = { normal: "Normal", test: "Test mode" };
 
-  function modeCard(mode, L) {
+  function modeCard(mode, L, chain) {
     const busy = !!pending;
     const c = el("section", "card mode" + (busy ? " busy" : ""));
     const top = el("div", "mode-top");
@@ -403,9 +404,19 @@ export const USAGE_JS = `(() => {
       box.append(line, track);
       c.append(box);
     } else {
-      c.append(el("p", "mode-say", mode === "test"
-        ? "No visitor limits. Anyone can ask as much as they like. Groq and Gemini's own daily limits still apply."
-        : "Visitor limits on: " + L.burst + " questions at once, then 1 more every " + L.refillSeconds + "s, up to " + L.daily + " a day each."));
+      if (mode === "test") {
+        // What test mode turns off, and the one thing it can't.
+        const list = el("ul", "mode-list");
+        for (const t of [
+          "No visitor limits: anyone can ask as much as they like.",
+          "No waiting: every question tries " + chain.join(" → ") + ", and the first one with room answers.",
+          "Only Groq's and Google's own daily limits can stop an answer. When all of them are full, visitors see “busy”.",
+        ]) list.append(el("li", null, t));
+        c.append(list);
+      } else {
+        c.append(el("p", "mode-say", "Visitor limits on: " + L.burst + " questions at once, then 1 more every " + L.refillSeconds +
+          "s, up to " + L.daily + " a day each. A model that says it's full is skipped for up to 30s."));
+      }
       if (failed && Date.now() - failed.at < 30000) c.append(el("p", "mode-note error", "Couldn't switch: " + failed.error + ". Try again."));
       else if (done && Date.now() - done.at < 10000) c.append(el("p", "mode-note saved", "✓ " + MODE_NAME[done.mode] + " is live for every visitor."));
     }

@@ -22,7 +22,7 @@ import {
 } from "./usage";
 import { USAGE_CSS, USAGE_HTML, USAGE_JS } from "./usage-page";
 import { allFacts, buildKnowledge, type KnowledgeSource } from "./knowledge";
-import { defaultProviders, utilityProviders } from "./providers/router";
+import { defaultProviders, setCooldowns, utilityProviders } from "./providers/router";
 import type { Provider } from "./providers/types";
 import { createEventStream, errorResponse, SSE_HEADERS, type ErrorCode } from "./sse";
 
@@ -99,6 +99,7 @@ export function createApp(deps: AppDeps) {
     // Test or normal mode, from KV (cached ~30s), for the routes that use limits.
     if (c.req.path === "/ask" || c.req.path.startsWith("/usage/data")) {
       config = applyMode(config, await readMode(c.env.JO_KV, config.statusMaxAgeSeconds));
+      if (c.req.path === "/ask") setCooldowns(config.mode !== "test");
     }
     c.set("config", config);
     const origin = c.req.header("Origin") ?? null;
