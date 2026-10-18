@@ -106,6 +106,18 @@ input { background: #121212; color: var(--text); border: 1px solid #383838; bord
 .toggle.is-test button.on { color: #ffd88a; }
 .toggle button:disabled { opacity: 1; cursor: progress; }
 .mode-say { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+.toggle.switching .thumb { animation: pulse 1.2s ease-in-out infinite; }
+.toggle button:disabled { cursor: progress; }
+.switching-box { margin-top: 12px; }
+.switching-line { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+.card.mode.busy { border-color: #4a4a4a; }
+.spinner { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid #444; border-top-color: var(--amber);
+  animation: spin .8s linear infinite; }
+.switch-track { height: 4px; border-radius: 999px; background: #2a2a2a; margin-top: 10px; overflow: hidden; }
+.switch-fill { height: 100%; width: 5%; border-radius: 999px; background: var(--amber); transition: width 1s linear; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .spinner, .toggle.switching .thumb { animation: none; } .switch-fill, .toggle .thumb { transition: none; } }
 .mode-note { font-size: 13px; margin: 6px 0 0; }
 .mode-note.saving { color: var(--muted); } .mode-note.saved { color: #8fd3a4; } .mode-note.error { color: #f2a39d; }
 @media (max-width: 520px) {
@@ -253,7 +265,10 @@ export const USAGE_JS = `(() => {
     status.append(el("span", "pill " + (d.jo.enabled ? "on" : "off"), d.jo.enabled ? "● On" : "● Off" + (d.jo.forceOff ? " (forced)" : "")));
     // The mode the page shows: the one just clicked, until the server reports it (KV takes up to a
     // minute to agree everywhere), so the switch never jumps back.
-    if (pending && (d.jo.mode === pending.mode || Date.now() - pending.at > 90000)) pending = null;
+    if (pending && pending.state === "switching" && d.jo.mode === pending.mode) {
+      done = { mode: pending.mode, at: Date.now() };
+      pending = null;
+    } else if (pending && Date.now() - pending.at > 180000) pending = null;
     const mode = pending ? pending.mode : d.jo.mode;
     if (mode === "test") status.append(el("span", "pill test", "Test mode"));
     const updated = el("span", "muted", "Updated " + new Date(d.now).toLocaleTimeString());
@@ -337,41 +352,86 @@ export const USAGE_JS = `(() => {
     }
   }
 
-  // Normal | Test mode switch: a sliding toggle that moves the moment it's clicked.
-  let pending = null; // { mode, at, state: "saving" | "saved" | "error", error? }
+  // Normal | Test mode switch: a sliding toggle that moves the moment it's clicked. Saving takes a
+  // second; every visitor seeing the new mode takes up to a minute (KV and the Worker's 30s cache),
+  // so the card shows a spinner and progress bar until /usage/data reports the new mode.
+  const SWITCH_MS = 60000;
+  let pending = null; // { mode, at, state: "saving" | "switching" }
+  let done = null; // { mode, at } just confirmed live
+  let failed = null; // { at, error }
   let lastData = null;
+  let poll = null;
+  const MODE_NAME = { normal: "Normal", test: "Test mode" };
+
   function modeCard(mode, L) {
-    const c = el("section", "card mode");
+    const busy = !!pending;
+    const c = el("section", "card mode" + (busy ? " busy" : ""));
     const top = el("div", "mode-top");
     const h = el("h2", null, "Mode");
-    const t = el("div", "toggle" + (mode === "test" ? " is-test" : ""));
+    const t = el("div", "toggle" + (mode === "test" ? " is-test" : "") + (busy ? " switching" : ""));
     t.setAttribute("role", "radiogroup");
     t.setAttribute("aria-label", "Mode");
+    t.setAttribute("aria-busy", String(busy));
     t.append(el("span", "thumb"));
     for (const m of ["normal", "test"]) {
-      const b = el("button", m === mode ? "on" : "", m === "normal" ? "Normal" : "Test mode");
+      const b = el("button", m === mode ? "on" : "", MODE_NAME[m]);
       b.type = "button";
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(m === mode));
-      b.disabled = !!(pending && pending.state === "saving");
+      b.disabled = busy;
       if (m !== mode) b.addEventListener("click", () => setMode(m));
       t.append(b);
     }
     top.append(h, t);
     c.append(top);
-    c.append(el("p", "mode-say", mode === "test"
-      ? "No visitor limits. Anyone can ask as much as they like. Groq and Gemini's own daily limits still apply."
-      : "Visitor limits on: " + L.burst + " questions at once, then 1 more every " + L.refillSeconds + "s, up to " + L.daily + " a day each."));
-    if (pending) {
-      const note = pending.state === "saving" ? ["saving", "Saving…"]
-        : pending.state === "error" ? ["error", "Couldn't switch: " + pending.error]
-        : ["saved", "✓ Saved. Live for every visitor within a minute."];
-      c.append(el("p", "mode-note " + note[0], note[1]));
+
+    if (busy) {
+      const box = el("div", "switching-box");
+      box.setAttribute("role", "status");
+      const line = el("div", "switching-line");
+      line.append(el("span", "spinner"));
+      const label = el("span", "switching-text");
+      label.dataset.switchAt = String(pending.at);
+      label.dataset.state = pending.state;
+      label.dataset.mode = pending.mode;
+      paintSwitch(label);
+      line.append(label);
+      const track = el("div", "switch-track"), fill = el("div", "switch-fill");
+      fill.dataset.switchAt = String(pending.at);
+      paintSwitch(fill);
+      track.append(fill);
+      box.append(line, track);
+      c.append(box);
+    } else {
+      c.append(el("p", "mode-say", mode === "test"
+        ? "No visitor limits. Anyone can ask as much as they like. Groq and Gemini's own daily limits still apply."
+        : "Visitor limits on: " + L.burst + " questions at once, then 1 more every " + L.refillSeconds + "s, up to " + L.daily + " a day each."));
+      if (failed && Date.now() - failed.at < 30000) c.append(el("p", "mode-note error", "Couldn't switch: " + failed.error + ". Try again."));
+      else if (done && Date.now() - done.at < 10000) c.append(el("p", "mode-note saved", "✓ " + MODE_NAME[done.mode] + " is live for every visitor."));
     }
     return c;
   }
 
+  // Updates the switching text and progress bar every second without a re-render.
+  function paintSwitch(n) {
+    const elapsed = Date.now() - Number(n.dataset.switchAt);
+    if (n.classList.contains("switch-fill")) {
+      // Fills toward 95% over the expected minute, then waits for the server to confirm.
+      n.style.width = Math.min(95, 5 + (elapsed / SWITCH_MS) * 90) + "%";
+      return;
+    }
+    const name = MODE_NAME[n.dataset.mode];
+    if (n.dataset.state === "saving") { n.textContent = "Switching to " + name + "… saving"; return; }
+    const left = Math.ceil((SWITCH_MS - elapsed) / 1000);
+    n.textContent = left > 0
+      ? "Switching to " + name + "… live for every visitor in about " + left + "s"
+      : "Switching to " + name + "… almost there";
+  }
+  setInterval(() => document.querySelectorAll("[data-switch-at]").forEach(paintSwitch), 1000);
+
   async function setMode(mode) {
+    failed = null;
+    done = null;
     pending = { mode, at: Date.now(), state: "saving" };
     if (lastData) render(lastData);
     try {
@@ -381,9 +441,13 @@ export const USAGE_JS = `(() => {
         body: JSON.stringify({ mode }),
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
-      pending = { mode, at: Date.now(), state: "saved" };
+      pending = { mode, at: pending.at, state: "switching" };
+      // Check every 5 seconds until the new mode is live.
+      clearInterval(poll);
+      poll = setInterval(() => { if (!pending) { clearInterval(poll); poll = null; } else load(false); }, 5000);
     } catch (e) {
-      pending = { mode: lastData ? lastData.jo.mode : mode, at: Date.now(), state: "error", error: e.message };
+      pending = null;
+      failed = { at: Date.now(), error: e.message };
     }
     if (lastData) render(lastData);
   }
