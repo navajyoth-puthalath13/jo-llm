@@ -326,6 +326,8 @@ export function createApp(deps: AppDeps) {
           testMode: config.mode === "test",
           mode: config.mode,
           limits: config.limits,
+          // The limits Normal mode applies, so the page can describe them while in test mode.
+          normalLimits: loadConfig(c.env).limits,
           models: config.models.map(name),
           utilityModels: config.utilityModels.map(name),
           answerReasoning: config.answerReasoning,
