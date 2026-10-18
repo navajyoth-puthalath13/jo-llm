@@ -26,8 +26,8 @@ describe("button rules", () => {
     expect(rules({ intent: "contact", answer }, ["github"])).toEqual(["email", "linkedin", "x", "substack"]);
   });
 
-  it("resume → resume first", () => {
-    expect(rules({ intent: "resume" }, ["email"])).toEqual(["resume", "email"]);
+  it("resume → only Open my resume, never an email button", () => {
+    expect(rules({ intent: "resume", answer: "Email me if you have questions." }, ["email", "linkedin"])).toEqual(["resume"]);
   });
 
   it("a named project → that project's button first", () => {
@@ -50,8 +50,8 @@ describe("button rules", () => {
     expect(rules({ intent: "private", answer: "I keep that private." }, ["email", "resume"])).toEqual([]);
   });
 
-  it("smalltalk → none", () => {
-    expect(rules({ intent: "smalltalk" }, ["system", "email"])).toEqual([]);
+  it("smalltalk → just More about me", () => {
+    expect(rules({ intent: "smalltalk" }, ["system", "email"])).toEqual(["about"]);
   });
 
   it("never offers the page the visitor is already on", () => {
@@ -121,7 +121,7 @@ describe("button picker", () => {
 
   it("doesn't spend a call when the rules decide on their own", async () => {
     const p = mockJsonProvider(JSON.stringify({ actions: ["system"] }));
-    for (const intent of ["smalltalk", "private", "contact"] as const) {
+    for (const intent of ["smalltalk", "private", "contact", "resume"] as const) {
       await pickButtons({ providers: [p], knowledge, ctx: ctx({ intent }), budgetMs: 1000, signal: signal() });
     }
     expect(p.calls).toHaveLength(0);
