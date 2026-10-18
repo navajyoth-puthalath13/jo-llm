@@ -4,7 +4,7 @@
 // textContent, never innerHTML.
 //
 // Layout follows the Claude usage panel: a one-line headline (is Jo answering, and with what), then
-// one card of rows: name · reset time · coloured % · bar. Exact counts are in each row's tooltip.
+// three cards (Visitors, Groq, Gemini) of rows: name · reset time · coloured % · bar. Exact counts are in each row's tooltip.
 
 export const USAGE_HTML = `<!doctype html>
 <html lang="en">
@@ -69,9 +69,10 @@ button:hover { background: #333; }
 button.ghost { background: transparent; }
 button:disabled { opacity: .5; cursor: default; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 12px; }
-.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 4px; }
-.card-head h2 { font-size: 16px; margin: 0; font-weight: 600; }
-.group { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; }
+.card h2 { font-size: 16px; margin: 0 0 14px; font-weight: 600; }
+.card h2 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: 8px; vertical-align: middle; }
+.card.jo { --tone: var(--jo); } .card.groq { --tone: var(--groq); } .card.gemini { --tone: var(--gemini); }
+.card .meter:last-child { margin-bottom: 2px; }
 .meter { margin-bottom: 14px; --tone: var(--blue); }
 .meter.jo { --tone: var(--jo); } .meter.groq { --tone: var(--groq); } .meter.gemini { --tone: var(--gemini); }
 .meter.warn { --tone: var(--amber); } .meter.full { --tone: var(--red); }
@@ -263,29 +264,32 @@ export const USAGE_JS = `(() => {
     } else { text = "All good. Jo is answering with " + short(live[0]) + "."; tone = "good"; }
     root.append(el("div", "headline " + tone, text));
 
-    const c = el("section", "card");
-    const head = el("div", "card-head");
-    head.append(el("h2", null, "Usage"));
-    c.append(head);
-
-    c.append(el("div", "group", "Visitors"));
-    c.append(row("All questions today", "", L.globalDailyModelCalls ? (d.stats.jo.budgetUsed / L.globalDailyModelCalls) * 100 : 0,
+    // Three cards: Visitors (Jo's own limits), Groq (both models), Gemini.
+    const card = (title, cls) => {
+      const c = el("section", "card " + cls);
+      const h = el("h2");
+      h.append(el("span", "dot"), document.createTextNode(title));
+      c.append(h);
+      root.append(c);
+      return c;
+    };
+    const visitors = card("Visitors", "jo");
+    visitors.append(row("All questions today", "", L.globalDailyModelCalls ? (d.stats.jo.budgetUsed / L.globalDailyModelCalls) * 100 : 0,
       countdown(midnight, "reset"), fmt(d.stats.jo.budgetUsed) + " of " + fmt(L.globalDailyModelCalls) + " questions", "jo"));
-    c.append(row("Busiest visitor", "", L.daily ? (d.stats.jo.busiestVisitor / L.daily) * 100 : 0,
+    visitors.append(row("Busiest visitor", "", L.daily ? (d.stats.jo.busiestVisitor / L.daily) * 100 : 0,
       countdown(midnight, "reset"), fmt(d.stats.jo.busiestVisitor) + " of " + fmt(L.daily) + " questions · " + fmt(d.stats.jo.visitorsToday) + " visitor(s) today", "jo"));
 
     for (const [provider, title] of [["groq", "Groq"], ["gemini", "Gemini"]]) {
       // Gemini models without a daily limit (Flash-Lite is per minute only) have nothing to fill.
       const names = all.filter((n) => n.startsWith(provider + ":") && (provider === "groq" || (get(n).limits || {}).requestsPerDay));
       if (!names.length) continue;
-      c.append(el("div", "group", title));
+      const c = card(title, provider);
       for (const n of names) {
         const s = state[n];
         const right = s.backAt ? countdown(s.backAt, "back") : s.resetAt ? countdown(s.resetAt, "reset") : el("span", "when", "Rolling 24 hr");
-        c.append(row(short(n), "", s.pct, right, s.title, provider));
+        c.append(row(short(n).replace(/^Gemini /, ""), "", s.pct, right, s.title, provider));
       }
     }
-    root.append(c);
   }
 
   async function load(probe, btn) {
