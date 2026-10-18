@@ -4,7 +4,7 @@
 
 import { catalogFingerprint } from "./actions";
 import { generateAnswer, type AnswerOutcome } from "./answer";
-import { pickButtons } from "./buttons";
+import { BUTTON_RULES_VERSION, pickButtons } from "./buttons";
 import type { Config } from "./config";
 import type { AskInput } from "./guard/validate";
 import { renderKnowledge, type Knowledge } from "./knowledge";
@@ -14,9 +14,9 @@ import type { Provider } from "./providers/types";
 import { filesForAnswer, routeQuestion, type Route } from "./route";
 
 /** Everything an answer depends on. Any change to a knowledge file, the rules or the catalog
- *  changes this, which invalidates cached answers. */
+ *  changes this, which invalidates cached answers (the button rules too: cached answers keep their buttons). */
 export function answerCacheScope(knowledge: Knowledge): string {
-  return `${knowledge.fingerprint}\n${RULES}\n${catalogFingerprint()}`;
+  return `${knowledge.fingerprint}\n${RULES}\n${catalogFingerprint()}\nbuttons:${BUTTON_RULES_VERSION}`;
 }
 
 export interface JoRunOptions {

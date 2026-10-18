@@ -37,6 +37,15 @@ describe("button rules", () => {
     expect(rules({ intent: "project", question: "best project?", answer: "Start with System." }, ["work"])).toEqual(["system", "work"]);
   });
 
+  it("how I work / why hire → See my work first; 'pull requests' in the answer isn't Guideline Agent", () => {
+    const answer = "I bring engineers in early and review pull requests while keeping the workflow central.";
+    expect(rules({ intent: "how_i_work", question: "How do you work with engineers?", answer }, ["a11y-agent", "email"])[0]).toBe("work");
+    expect(rules({ intent: "how_i_work", question: "How do you work with engineers?", answer }, [])).toEqual(["work"]);
+    expect(namedProjects(knowledge, "Why should we hire a senior designer?", answer)).toEqual([]);
+    // Asking about pull requests still points at it.
+    expect(namedProjects(knowledge, "Do you have anything for pull request reviews?", "")).toEqual(["guideline-agent"]);
+  });
+
   it("work_overview → work first, even when the answer names every project", () => {
     expect(rules({ intent: "work_overview", question: "show me your stuff", answer: "Here's my work." })).toEqual(["work"]);
     const answer = "My main projects are System, CARE Scribe and Guideline Agent.";
@@ -62,7 +71,7 @@ describe("button rules", () => {
   });
 
   it("at most 3, no duplicates, unknown ids dropped", () => {
-    expect(rules({ intent: "how_i_work" }, ["github", "GitHub", "nope", "https://evil.example.com", "about", "work", "x"])).toEqual([
+    expect(rules({ intent: "about" }, ["github", "GitHub", "nope", "https://evil.example.com", "about", "work", "x"])).toEqual([
       "github",
       "about",
       "work",
@@ -93,7 +102,7 @@ describe("button picker", () => {
     const r = await pickButtons({
       providers: [p],
       knowledge,
-      ctx: ctx({ intent: "how_i_work", question: "Side projects?", answer: "A few small tools." }),
+      ctx: ctx({ intent: "about", question: "Side projects?", answer: "A few small tools." }),
       budgetMs: 1000,
       signal: signal(),
     });
