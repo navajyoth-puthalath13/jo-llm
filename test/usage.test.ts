@@ -175,3 +175,17 @@ describe("page script", () => {
     expect(USAGE_JS).not.toContain("innerHTML");
   });
 });
+
+describe("page countdowns", () => {
+  it("keeps the wait-time patterns intact in the served script", async () => {
+    const { USAGE_JS } = await import("../src/usage-page");
+    // Run the page's own parser: build it from the served source.
+    const src = /const parseWait = \(s\) => \{[\s\S]*?\n  \};/.exec(USAGE_JS)![0];
+    const parseWait = new Function(`${src}; return parseWait;`)() as (s: string) => number | null;
+    expect(parseWait("7m46s")).toBe(466_000);
+    expect(parseWait("14h18m53s")).toBe((14 * 3600 + 18 * 60 + 53) * 1000);
+    expect(parseWait("51.84s")).toBe(51_840);
+    expect(parseWait("nonsense")).toBeNull();
+    expect(USAGE_JS).toContain("retry in ([\\dhms.]+)");
+  });
+});
