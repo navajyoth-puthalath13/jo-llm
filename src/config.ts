@@ -26,6 +26,9 @@ export interface Env {
   IP_SALT?: string;
   /** Opens the private usage page's data (/usage/data). Unset: the page is disabled. */
   ADMIN_TOKEN?: string;
+  /** Local dev only: also count this server's model calls on the live usage page. */
+  USAGE_FORWARD_URL?: string;
+  USAGE_FORWARD_TOKEN?: string;
 
   // Vars (wrangler.toml / .dev.vars)
   ALLOWED_ORIGINS?: string;
@@ -66,6 +69,8 @@ export interface Config {
   groqKey: string;
   ipSalt: string;
   adminToken: string;
+  usageForwardUrl: string;
+  usageForwardToken: string;
   forceOff: boolean;
   debug: boolean;
 
@@ -171,6 +176,8 @@ export function loadConfig(env: Env): Config {
     groqKey: env.GROQ_API_KEY ?? "",
     ipSalt: env.IP_SALT ?? "",
     adminToken: env.ADMIN_TOKEN ?? "",
+    usageForwardUrl: env.USAGE_FORWARD_URL ?? "",
+    usageForwardToken: env.USAGE_FORWARD_TOKEN ?? "",
     forceOff: env.JO_FORCE_OFF === "true",
     debug: env.JO_DEBUG === "true",
 

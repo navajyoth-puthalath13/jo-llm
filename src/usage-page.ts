@@ -350,7 +350,7 @@ export const USAGE_JS = `(() => {
     if (groq.length) {
       const btn = el("button", null, "Check now");
       btn.type = "button";
-      btn.addEventListener("click", () => load(true, btn));
+      btn.addEventListener("click", () => load("groq", btn));
       const c = card("Groq", btn, "groq");
       groq.forEach((n) => groqModel(c, n, get(n)));
       root.append(c);
@@ -359,8 +359,18 @@ export const USAGE_JS = `(() => {
     // Gemini: every Gemini model in one card
     const gemini = all.filter((n) => n.startsWith("gemini:"));
     if (gemini.length) {
-      const c = card("Gemini", null, "gemini");
+      const btn = el("button", null, "Check now");
+      btn.type = "button";
+      btn.title = "Asks Google directly. Free when the day is used up; otherwise uses 1 of the 20 daily requests.";
+      btn.addEventListener("click", () => load("gemini", btn));
+      const c = card("Gemini", btn, "gemini");
       gemini.forEach((n) => geminiModel(c, n, get(n), d));
+      if (d.geminiProbe) {
+        const lines = d.geminiProbe.map((g) => (MODELS[g.model] || [g.model])[0] + ": " +
+          (g.status === 429 ? "Google says the limit is reached" + (g.detail ? " (" + g.detail + ")" : "") :
+           g.status === 200 ? "still available (this check used 1 request)" : "couldn't check (HTTP " + g.status + ")"));
+        c.append(el("div", "note live", "Google now: " + lines.join(" · ")));
+      }
       root.append(c);
     }
   }
@@ -370,11 +380,11 @@ export const USAGE_JS = `(() => {
     if (!token) return showLogin();
     if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
     try {
-      const res = await fetch("/usage/data" + (probe ? "?probe=1" : ""), { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+      const res = await fetch("/usage/data" + (probe ? "?probe=" + probe : ""), { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
       if (res.status === 401) { store.clear(); return showLogin("That token didn't work."); }
       if (!res.ok) throw new Error("HTTP " + res.status);
       const d = await res.json();
-      if (d.probe) probes = Object.fromEntries(d.probe.map((p) => [p.model, p]));
+      if (d.probe) { probes = Object.fromEntries(d.probe.map((p) => [p.model, p])); probesAt = Date.now(); }
       $("login").hidden = true;
       $("content").hidden = false;
       render(d);
@@ -383,6 +393,7 @@ export const USAGE_JS = `(() => {
       if (u) u.textContent = "Couldn't load: " + e.message;
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "Check now"; }
+      checkedOnce = true;
     }
   }
 
@@ -394,9 +405,12 @@ export const USAGE_JS = `(() => {
     err.textContent = msg || "";
   }
 
-  $("login").addEventListener("submit", (e) => { e.preventDefault(); store.set($("token").value.trim()); $("token").value = ""; load(false); });
+  // The first load of the page asks Groq directly, so its numbers are true from the start.
+  let checkedOnce = false;
+  const first = () => load(checkedOnce ? false : "groq");
+  $("login").addEventListener("submit", (e) => { e.preventDefault(); store.set($("token").value.trim()); $("token").value = ""; first(); });
   $("refresh").addEventListener("click", () => load(false));
   $("signout").addEventListener("click", () => { store.clear(); probes = {}; showLogin(); });
   setInterval(() => { if (!document.hidden && store.get()) load(false); }, 30000);
-  load(false);
+  first();
 })();`;

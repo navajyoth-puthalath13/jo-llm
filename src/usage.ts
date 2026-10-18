@@ -9,6 +9,7 @@
 // Only Jo's Worker is seen here. Scripts run from a laptop (npm run eval, npm run ask against
 // localhost) use the same API keys but aren't recorded, so the page shows them as a caveat.
 
+import { z } from "zod";
 import { limitDetail, ProviderHttpError, type JsonRequest, type Provider, type ProviderRequest } from "./providers/types";
 
 export interface UsageEvent {
@@ -263,4 +264,64 @@ export async function probeGroq(apiKey: string, model: string): Promise<GroqProb
   }
   probe.detail = limitDetail(body.slice(0, 4000));
   return probe;
+}
+
+// ── Usage from outside the Worker ─────────────────────────────────────────────
+// Laptop tests (npm run eval, the local dev server) use the same API keys. They report their
+// model calls to the live Worker's POST /usage/record (admin token required), so the usage page
+// counts everything spent from these keys, not just what the live Worker did.
+
+
+export const UsageEventSchema = z
+  .object({
+    provider: z.string().regex(/^[a-z0-9-]{1,20}:[\w./-]{1,80}$/),
+    ok: z.boolean(),
+    tokens: z.number().int().min(0).max(1_000_000).optional(),
+    status: z.number().int().min(0).max(599).optional(),
+    detail: z.string().max(200).optional(),
+    retryAfterSeconds: z.number().min(0).max(86_400).optional(),
+  })
+  .strict();
+
+export const UsageBatchSchema = z.object({ events: z.array(UsageEventSchema).min(1).max(200) }).strict();
+
+/** Sends events to the live Worker's usage counter. Best effort: never throws. */
+export async function forwardUsage(url: string, token: string, events: UsageEvent[]): Promise<void> {
+  if (!url || !token || !events.length) return;
+  try {
+    await fetch(`${url.replace(/\/+$/, "")}/usage/record`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ events }),
+    });
+  } catch {
+    // The page just misses these calls.
+  }
+}
+
+/** Turns "Check now" results into usage events, so what a provider says is saved. */
+export function probeEvents(probes: { model: string; status: number; detail?: string }[]): UsageEvent[] {
+  return probes
+    .filter((p) => p.status === 200 || p.status === 429)
+    .map((p) => (p.status === 200 ? { provider: p.model, ok: true } : { provider: p.model, ok: false, status: 429, detail: p.detail }));
+}
+
+export interface GeminiProbe {
+  model: string;
+  status: number;
+  detail?: string;
+}
+
+/**
+ * Asks Gemini whether it still has quota, with one tiny request. When the day is used up the
+ * refusal costs nothing and carries Google's reset time; when it isn't, it uses one request.
+ */
+export async function probeGemini(apiKey: string, model: string): Promise<GeminiProbe> {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with OK." }] }], generationConfig: { maxOutputTokens: 5 } }),
+  });
+  const body = await res.text();
+  return { model: `gemini:${model}`, status: res.status, detail: res.status === 429 ? limitDetail(body.slice(0, 4000)) : undefined };
 }

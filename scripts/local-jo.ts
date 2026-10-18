@@ -7,6 +7,7 @@ import { runJo, type JoResult } from "../src/jo";
 import { allFacts, buildKnowledge } from "../src/knowledge";
 import { defaultProviders, utilityProviders } from "../src/providers/router";
 import type { Provider } from "../src/providers/types";
+import { forwardUsage, recordingProviders, type UsageEvent } from "../src/usage";
 import { readDevVars, readKnowledgeSources } from "./wrangler";
 
 export const config: Config = loadConfig({ ...readDevVars(), ...process.env } as never);
@@ -32,17 +33,21 @@ export async function askLocal(
   opts: { answerProviders?: Provider[]; trace?: (step: string, detail: string) => void } = {},
 ): Promise<LocalRun> {
   const started = Date.now();
+  // Every call made with these keys is counted on the live usage page, if .dev.vars says where.
+  const events: UsageEvent[] = [];
+  const record = (e: UsageEvent) => void events.push(e);
   const result = await runJo({
     input,
     knowledge,
-    answerProviders: opts.answerProviders ?? defaultProviders(config),
-    utilityProviders: utilityProviders(config),
+    answerProviders: recordingProviders(opts.answerProviders ?? defaultProviders(config), record),
+    utilityProviders: recordingProviders(utilityProviders(config), record),
     config,
     linkAllowlist,
     signal: new AbortController().signal,
     onText: async () => {},
     trace: opts.trace,
   });
+  await forwardUsage(config.usageForwardUrl, config.usageForwardToken, events);
   return { ...result, ms: Date.now() - started };
 }
 

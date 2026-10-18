@@ -189,3 +189,91 @@ describe("page countdowns", () => {
     expect(USAGE_JS).toContain("retry in ([\\dhms.]+)");
   });
 });
+
+describe("usage from outside the Worker", () => {
+  const record = (ctx: ReturnType<typeof setup>, body: unknown, token = TOKEN) =>
+    ctx.app.request(
+      "/usage/record",
+      { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) },
+      ctx.env,
+    );
+
+  it("records laptop events with the admin token only", async () => {
+    const ctx = setup({ env: { ADMIN_TOKEN: TOKEN } });
+    const events = [
+      { provider: "groq:openai/gpt-oss-120b", ok: true, tokens: 3000 },
+      { provider: "gemini:gemini-3.6-flash", ok: false, status: 429, detail: "requests per day: limit 20; resets in 13h" },
+    ];
+    expect((await record(ctx, { events }, "wrong")).status).toBe(401);
+    expect((await record(ctx, { events })).status).toBe(200);
+    const stats = await ctx.limiter.stats([]);
+    expect(stats.providers.find((p) => p.provider === "groq:openai/gpt-oss-120b")?.last24h.tokens).toBe(3000);
+    expect(stats.providers.find((p) => p.provider === "gemini:gemini-3.6-flash")?.lastLimit?.detail).toContain("limit 20");
+  });
+
+  it("rejects anything that isn't a clean list of events", async () => {
+    const ctx = setup({ env: { ADMIN_TOKEN: TOKEN } });
+    for (const bad of [
+      {},
+      { events: [] },
+      { events: [{ provider: "groq:x", ok: true, extra: 1 }] },
+      { events: [{ provider: "<script>", ok: true }] },
+      { events: [{ provider: "groq:x", ok: true, tokens: -5 }] },
+      { events: [{ provider: "groq:x", ok: true, detail: "x".repeat(500) }] },
+    ]) {
+      expect((await record(ctx, bad)).status, JSON.stringify(bad).slice(0, 60)).toBe(400);
+    }
+  });
+
+  it("is off without ADMIN_TOKEN", async () => {
+    const ctx = setup();
+    expect((await record(ctx, { events: [{ provider: "groq:x", ok: true }] })).status).toBe(404);
+  });
+
+  it("forwards the local server's calls to the live page when configured", async () => {
+    const sent: { url: string; body: string; auth: string | null }[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      sent.push({ url, body: String(init.body), auth: new Headers(init.headers).get("Authorization") });
+      return new Response("{}");
+    }) as typeof fetch;
+    try {
+      const ctx = setup({
+        env: { USAGE_FORWARD_URL: "https://live.example.dev/", USAGE_FORWARD_TOKEN: "prod-token" },
+        providers: [mockProvider(["Hi."], { name: "groq:openai/gpt-oss-120b" })],
+      });
+      await (await ask(ctx, { question: "Tell me about System" })).text();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!.url).toBe("https://live.example.dev/usage/record");
+      expect(sent[0]!.auth).toBe("Bearer prod-token");
+      expect(JSON.parse(sent[0]!.body).events[0]).toMatchObject({ provider: "groq:openai/gpt-oss-120b", ok: true });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("saves what a provider says when checked", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            message:
+              "Rate limit reached for model `openai/gpt-oss-120b` in organization `org_x` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199100, Requested 6020. Please try again in 9m5s.",
+          },
+        }),
+        { status: 429 },
+      )) as typeof fetch;
+    try {
+      const ctx = setup({ env: { ADMIN_TOKEN: TOKEN, GROQ_API_KEY: "k" } });
+      const res = await data(ctx, { Authorization: `Bearer ${TOKEN}` }, "?probe=groq");
+      const body = (await res.json()) as { probe: { dailyUsed: number }[] };
+      expect(body.probe[0]!.dailyUsed).toBe(199100);
+      const saved = (await ctx.limiter.stats([])).providers.find((p) => p.provider === "groq:openai/gpt-oss-120b");
+      expect(saved?.lastLimit?.detail).toContain("used 199,100 of 200,000");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});

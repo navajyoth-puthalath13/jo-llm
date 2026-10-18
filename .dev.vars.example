@@ -16,3 +16,8 @@ PER_IP_DAILY=1000
 
 # Opens the private usage page (/usage). In production: npx wrangler secret put ADMIN_TOKEN
 ADMIN_TOKEN=a-long-random-string
+
+# Count laptop tests (npm run eval, npm run dev + npm run ask) on the LIVE usage page.
+# USAGE_FORWARD_TOKEN is the production ADMIN_TOKEN (the one you type on /usage).
+USAGE_FORWARD_URL=https://jo-llm.navajyothputalath13.workers.dev
+USAGE_FORWARD_TOKEN=your-production-admin-token

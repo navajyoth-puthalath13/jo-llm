@@ -8,7 +8,17 @@ import { hashIp, type Limiter } from "./guard/ratelimit";
 import { linksFromKnowledge } from "./guard/output";
 import { parseAsk, readCappedBody } from "./guard/validate";
 import { answerCacheScope, runJo } from "./jo";
-import { probeGroq, recordingProviders, type GroqProbe, type UsageEvent } from "./usage";
+import {
+  forwardUsage,
+  probeEvents,
+  probeGemini,
+  probeGroq,
+  recordingProviders,
+  UsageBatchSchema,
+  type GeminiProbe,
+  type GroqProbe,
+  type UsageEvent,
+} from "./usage";
 import { USAGE_CSS, USAGE_HTML, USAGE_JS } from "./usage-page";
 import { allFacts, buildKnowledge, type KnowledgeSource } from "./knowledge";
 import { defaultProviders, utilityProviders } from "./providers/router";
@@ -237,7 +247,11 @@ export function createApp(deps: AppDeps) {
       } finally {
         await writer.close();
       }
-      if (usageEvents.length) await limiter.recordUsage(usageEvents).catch(() => {});
+      if (usageEvents.length) {
+        await limiter.recordUsage(usageEvents).catch(() => {});
+        // Local dev server: count these calls on the live usage page too.
+        await forwardUsage(config.usageForwardUrl, config.usageForwardToken, usageEvents);
+      }
       trace("done", outcome.ok ? `✓ answered by ${outcome.provider}, first word at ${firstTokenMs}ms` : `→ error "${outcome.code}"`);
       logEvent({
         outcome: outcome.ok ? "ok" : outcome.code,
@@ -276,14 +290,26 @@ export function createApp(deps: AppDeps) {
     const now = Date.now();
     const name = (m: { provider: string; model: string }) => `${m.provider}:${m.model}`;
     const known = [...new Set([...config.models, ...config.utilityModels].map(name))];
-    const stats = await deps.limiter(c.env, config).stats(known);
+    const limiter = deps.limiter(c.env, config);
+    const modelsOf = (provider: string) =>
+      [...new Set([...config.models, ...config.utilityModels].filter((m) => m.provider === provider).map((m) => m.model))];
+    // Checks ask the providers directly; what they say is saved, so the page keeps showing it.
     let probe: GroqProbe[] | undefined;
-    if (c.req.query("probe") === "1" && config.groqKey) {
-      const groqModels = [...new Set([...config.models, ...config.utilityModels].filter((m) => m.provider === "groq").map((m) => m.model))];
+    let geminiProbe: GeminiProbe[] | undefined;
+    const check = c.req.query("probe");
+    if ((check === "1" || check === "groq") && config.groqKey) {
       probe = await Promise.all(
-        groqModels.map((m) => probeGroq(config.groqKey, m).catch(() => ({ model: `groq:${m}`, status: 0 }) as GroqProbe)),
+        modelsOf("groq").map((m) => probeGroq(config.groqKey, m).catch(() => ({ model: `groq:${m}`, status: 0 }) as GroqProbe)),
       );
     }
+    if (check === "gemini" && config.geminiKey) {
+      geminiProbe = await Promise.all(
+        modelsOf("gemini").map((m) => probeGemini(config.geminiKey, m).catch(() => ({ model: `gemini:${m}`, status: 0 }))),
+      );
+    }
+    const checked = probeEvents([...(probe ?? []), ...(geminiProbe ?? [])]);
+    if (checked.length) await limiter.recordUsage(checked).catch(() => {});
+    const stats = await limiter.stats(known);
     const utcMidnight = new Date(now);
     utcMidnight.setUTCHours(24, 0, 0, 0);
     return c.json(
@@ -301,10 +327,30 @@ export function createApp(deps: AppDeps) {
         stats,
         resets: { utcMidnightInMs: utcMidnight.getTime() - now },
         probe,
+        geminiProbe,
       },
       200,
       { "Cache-Control": "no-store" },
     );
+  });
+
+  // Laptop tests and the local dev server report the model calls they made with the same keys.
+  app.post("/usage/record", async (c) => {
+    const config = c.get("config");
+    if (!config.adminToken) return c.text("Not found", 404);
+    if (!(await tokenMatches(c.req.header("Authorization"), config.adminToken))) {
+      return c.json({ error: "unauthorized" }, 401, { "Cache-Control": "no-store" });
+    }
+    const raw = await readCappedBody(c.req.raw, 32_768);
+    let parsed: ReturnType<typeof UsageBatchSchema.safeParse> | null = null;
+    try {
+      parsed = raw === null ? null : UsageBatchSchema.safeParse(JSON.parse(raw));
+    } catch {
+      parsed = null;
+    }
+    if (!parsed?.success) return c.json({ error: "invalid" }, 400, { "Cache-Control": "no-store" });
+    await deps.limiter(c.env, config).recordUsage(parsed.data.events);
+    return c.json({ recorded: parsed.data.events.length }, 200, { "Cache-Control": "no-store" });
   });
 
   app.notFound((c) => c.text("Not found", 404));
