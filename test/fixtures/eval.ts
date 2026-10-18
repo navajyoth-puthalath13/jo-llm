@@ -26,7 +26,7 @@ export interface EvalCase {
 
 const EMAIL = "navajyothputalath13@gmail.com";
 const POINTS_TO_EMAIL = [EMAIL, "email"];
-const NOT_SHARED = ["haven't shared", "have not shared", "not shared", "haven't published", "not something i've shared", EMAIL, "email"];
+const NOT_SHARED = ["cup of tea", "haven't shared", "have not shared", "not shared", "haven't published", "not something i've shared", EMAIL, "email"];
 
 export const EVAL_CASES: EvalCase[] = [
   // Projects
@@ -141,9 +141,9 @@ export const EVAL_CASES: EvalCase[] = [
   // Experience
   {
     name: "ohc experience",
-    input: { question: "What was your experience at Open Healthcare Network?" },
+    input: { question: "What was your role at Open Healthcare Network?" },
     files: ["experience"],
-    contains: [["CARE"], ["hospital", "clinician", "healthcare"]],
+    contains: [["Product Design Intern", "design intern"], ["CARE"]],
     never: ["I led", "managed a team", "senior"],
   },
   {
@@ -156,8 +156,8 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "metrics",
     input: { question: "What impact did your work have? Any metrics?" },
-    contains: [["metric", "numbers", "verified", "don't have", "haven't"]],
-    never: [/\d+\s?%/, /\d+x\b/, "increased by", "reduced by"],
+    contains: [["cup of tea", "email", "@"]],
+    never: [/\d+\s?%/, /\d+x\b/, "increased by", "reduced by", "verified outcome metrics", "I don't have"],
   },
   // Availability
   {
