@@ -36,7 +36,7 @@ export const USAGE_HTML = `<!doctype html>
 
   <div id="content" hidden></div>
 
-  <p class="muted foot">Counted by Jo's Worker. Tests from a laptop use the same keys but aren't counted; when a provider reports its own numbers, those are shown instead.</p>
+  <p class="muted foot">Counted by Jo's Worker, plus laptop tests when <code>.dev.vars</code> forwards them. When a provider reports its own numbers, those are shown instead.</p>
 </main>
 <script src="/usage/app.js"></script>
 </body>
@@ -74,18 +74,24 @@ button:disabled { opacity: .5; cursor: default; }
 .model { font-size: 13px; color: var(--muted); margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .card-head + .model { margin-top: 0; padding-top: 0; border-top: 0; }
 .model b { color: var(--text); font-weight: 600; }
-.meter { margin-bottom: 14px; }
-.row { display: flex; justify-content: space-between; gap: 12px; }
-.label { font-weight: 600; font-size: 15px; }
+.meter { margin-bottom: 16px; --tone: var(--accent, var(--blue)); }
+.meter.warn { --tone: var(--amber); } .meter.full { --tone: var(--red); }
+.row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.label { font-size: 15px; }
+.right { display: inline-flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.when { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.when.back { color: #f2a39d; } .when.ok { color: #8fd3a4; }
+.pct { color: var(--tone); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
 .value { color: var(--muted); font-size: 14px; white-space: nowrap; }
-.bar { height: 9px; background: var(--track); border-radius: 999px; margin: 7px 0 5px; overflow: hidden; }
-.fill { height: 100%; background: var(--accent, var(--blue)); border-radius: 999px; }
+.bar { height: 10px; border-radius: 999px; margin: 8px 0 6px; overflow: hidden;
+  background: color-mix(in srgb, var(--tone) 18%, #1a1a1a); }
+.fill { height: 100%; background: var(--tone); border-radius: 999px; transition: width .4s ease; }
 .card.jo { --accent: var(--jo); border-left: 3px solid var(--jo); }
 .card.groq { --accent: var(--groq); border-left: 3px solid var(--groq); }
 .card.gemini { --accent: var(--gemini); border-left: 3px solid var(--gemini); }
 .card-head h2 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent, var(--muted)); margin-right: 8px; vertical-align: middle; }
 .resets .name .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
-.fill.warn { background: var(--amber); } .fill.full { background: var(--red); }
+
 .sub { color: var(--muted); font-size: 13px; }
 .note { margin: -4px 0 14px; padding: 8px 10px; border-radius: 10px; font-size: 13px; }
 .note.limit { background: #2a2121; border: 1px solid #4a2f2f; }
@@ -99,7 +105,7 @@ input { background: #121212; color: var(--text); border: 1px solid #383838; bord
 .seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 3px 12px; font-size: 12px; }
 .seg button.active { background: #2f2f2f; color: var(--text); }
 .seg button.active.test { color: var(--amber); }
-.bar.unknown { background: repeating-linear-gradient(45deg, #2b2b2b 0 6px, #343434 6px 12px); }
+.bar.unknown { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--tone) 10%, #1d1d1d) 0 6px, color-mix(in srgb, var(--tone) 20%, #1d1d1d) 6px 12px); }
 .subrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border-radius: 999px; padding: 3px 10px;
   background: #262626; border: 1px solid #353535; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -165,7 +171,28 @@ export const USAGE_JS = `(() => {
   function staticChip(text, cls) {
     return el("span", "chip" + (cls ? " " + cls : ""), text);
   }
+  // Inline countdown for a bar's header, like "Resets in 2 hr 29 min" in the Claude panel.
+  function countdown(at, kind, label) {
+    const n = el("span", "when");
+    n.dataset.at = String(at);
+    n.dataset.kind = kind;
+    n.dataset.label = label || "";
+    n.dataset.inline = "1";
+    paint(n);
+    return n;
+  }
   function paint(c) {
+    if (c.dataset.inline) {
+      const left = Number(c.dataset.at) - Date.now();
+      if (c.dataset.kind === "back") {
+        c.className = "when " + (left > 0 ? "back" : "ok");
+        c.textContent = left > 0 ? (c.dataset.label || "Back in") + " " + clock(left) : "Available now";
+      } else {
+        c.className = "when";
+        c.textContent = (c.dataset.label || "Resets in") + " " + (left > 0 ? clock(left) : "now");
+      }
+      return;
+    }
     const left = Number(c.dataset.at) - Date.now();
     const label = c.dataset.label;
     c.replaceChildren();
@@ -182,7 +209,7 @@ export const USAGE_JS = `(() => {
       c.append(el("span", "k", label || "↻"), document.createTextNode(left > 0 ? clock(left) : "now"));
     }
   }
-  setInterval(() => document.querySelectorAll(".chip[data-at]").forEach(paint), 1000);
+  setInterval(() => document.querySelectorAll("[data-at]").forEach(paint), 1000);
 
   /** When a Groq model lets Jo in again, if it said (probe or last refusal); else null. */
   function groqBackAt(name, p) {
@@ -196,35 +223,28 @@ export const USAGE_JS = `(() => {
     return w != null ? p.lastLimit.at + w : null;
   }
 
-  // One row: label, "N% used", bar, grey line. Without a limit: label and the number only.
-  function meter(label, used, limit, sub, chips) {
-    const box = el("div", "meter");
+  // One meter, Claude-panel style: label on the left; reset countdown and coloured % on the right;
+  // a thick bar in the provider's colour (amber from 60%, red from 90%); one grey detail line.
+  function meter(label, used, limit, sub, right) {
+    const pctExact = limit ? (used / limit) * 100 : 0;
+    const pct = Math.min(100, Math.round(pctExact));
+    const box = el("div", "meter" + (pct >= 90 ? " full" : pct >= 60 ? " warn" : ""));
     const row = el("div", "row");
     row.append(el("span", "label", label));
+    const r = el("span", "right");
+    if (right) r.append(typeof right === "string" ? el("span", "when", right) : right);
+    if (limit) r.append(el("span", "pct", used > 0 && pctExact < 1 ? "<1%" : pct + "%"));
+    else r.append(el("span", "value", fmt(used)));
+    row.append(r);
+    box.append(row);
     if (limit) {
-      const pct = Math.min(100, Math.round((used / limit) * 100));
-      row.append(el("span", "value", pct + "% used"));
-      box.append(row);
-      const bar = el("div", "bar"), fill = el("div", "fill" + (pct >= 90 ? " full" : pct >= 60 ? " warn" : ""));
-      fill.style.width = pct + "%";
+      const bar = el("div", "bar"), fill = el("div", "fill");
+      // Anything used stays visible: at least a sliver, never an empty-looking bar.
+      fill.style.width = (used > 0 ? Math.max(1.5, pctExact) : 0) + "%";
       bar.append(fill);
       box.append(bar);
-    } else {
-      row.append(el("span", "value", fmt(used)));
-      box.append(row);
     }
-    if (sub || (chips && chips.length)) {
-      const line = el("div", "subrow");
-      line.append(el("span", "sub", sub || ""));
-      if (chips && chips.length) {
-        const holder = el("span");
-        holder.style.display = "inline-flex";
-        holder.style.gap = "6px";
-        chips.forEach((ch) => holder.append(ch));
-        line.append(holder);
-      }
-      box.append(line);
-    }
+    if (sub) box.append(el("div", "sub", sub));
     return box;
   }
 
@@ -254,24 +274,24 @@ export const USAGE_JS = `(() => {
     const probe = probes[name];
     const ex = p.lastLimit && /tokens per day: used ([\\d,]+) of/.exec(p.lastLimit.detail || "");
     const backAt = groqBackAt(name, p);
-    const tokenChips = backAt ? [chip(backAt, "back", "Back in")] : [staticChip("Rolling 24 hr")];
+    const tokenRight = () => (backAt ? countdown(backAt, "back", "Back in") : "Rolling 24 hr");
     // Groq only says its exact daily count when it's nearly out (its refusal carries it). Show the
     // exact number when we have it; otherwise say so, instead of a precise-looking guess.
     if (probe && probe.dailyUsed != null) {
-      c.append(meter("Daily tokens", probe.dailyUsed, L.tokensPerDay, fmt(probe.dailyUsed) + " of " + fmt(L.tokensPerDay) + " · Groq's count, just now", tokenChips));
-    } else if (ex && Date.now() - p.lastLimit.at < 2 * 3600000) {
+      c.append(meter("Daily tokens", probe.dailyUsed, L.tokensPerDay, fmt(probe.dailyUsed) + " of " + fmt(L.tokensPerDay) + " · Groq's count, just now", tokenRight()));
+    } else if (ex && Date.now() - p.lastLimit.at < 2 * 3600000 && !(probe && probe.dailyAtLeastLeft && probesAt > p.lastLimit.at)) {
+      // An old refusal's count, unless a newer check says there's room again.
       const used = Number(ex[1].replace(/,/g, ""));
-      c.append(meter("Daily tokens", used, L.tokensPerDay, fmt(used) + " of " + fmt(L.tokensPerDay) + " · Groq's count, " + ago(p.lastLimit.at), tokenChips));
+      c.append(meter("Daily tokens", used, L.tokensPerDay, fmt(used) + " of " + fmt(L.tokensPerDay) + " · Groq's count, " + ago(p.lastLimit.at), tokenRight()));
     } else {
-      const box = el("div", "meter");
-      const row = el("div", "row");
-      row.append(el("span", "label", "Daily tokens"), el("span", "value", "Not reported"));
-      const bar = el("div", "bar unknown");
-      const line = el("div", "subrow");
-      const left = probe && probe.dailyAtLeastLeft ? "Groq says at least " + fmt(probe.dailyAtLeastLeft) + " left · " : "";
-      line.append(el("span", "sub", left + "Groq shows its count only when nearly full · Jo saw " + fmt(p.last24h.tokens) + " in 24 hr"));
-      tokenChips.forEach((ch) => line.append(ch));
-      box.append(row, bar, line);
+      // Groq didn't give its exact count: show what Jo saw as a minimum, on a hatched bar.
+      const seen = p.last24h.tokens;
+      const box = meter("Daily tokens", seen, L.tokensPerDay,
+        (probe && probe.dailyAtLeastLeft ? "Groq says at least " + fmt(probe.dailyAtLeastLeft) + " left · " : "") +
+        "Groq shows its exact count only when nearly full · Jo saw " + fmt(seen) + " in 24 hr", tokenRight());
+      box.querySelector(".bar").classList.add("unknown");
+      const pctEl = box.querySelector(".pct");
+      if (pctEl) pctEl.textContent = "≥" + pctEl.textContent.replace("<", "");
       c.append(box);
     }
     c.append(meter("Daily requests", p.last24h.requests, L.requestsPerDay,
@@ -296,12 +316,12 @@ export const USAGE_JS = `(() => {
     const fullToday = p.lastLimit && p.lastLimit.at >= dayStart && /per day/.test(p.lastLimit.detail || "");
     const used = fullToday && L.requestsPerDay ? L.requestsPerDay : p.today.requests;
     const resetAt = d.now + d.resets.utcMidnightInMs;
-    const resetChip = fullToday ? chip(resetAt, "back", "Used up · back in") : chip(resetAt, "reset", "↻ resets in");
+    const resetRight = fullToday ? countdown(resetAt, "back", "Back in") : countdown(resetAt, "reset");
     if (L.requestsPerDay) {
       c.append(meter("Daily requests", used, L.requestsPerDay,
-        fmt(used) + " of " + fmt(L.requestsPerDay) + (fullToday ? " · Google says used up" : ""), [resetChip]));
+        fmt(used) + " of " + fmt(L.requestsPerDay) + (fullToday ? " · Google says used up" : ""), resetRight));
     } else {
-      c.append(meter("Requests today", used, 0, L.requestsPerMinute ? L.requestsPerMinute + " per minute" : "", [resetChip]));
+      c.append(meter("Requests today", used, 0, L.requestsPerMinute ? L.requestsPerMinute + " per minute" : "", resetRight));
     }
     if (p.lastLimit && !fullToday) c.append(el("div", "note limit", "Limit hit " + ago(p.lastLimit.at) + (p.lastLimit.detail ? ": " + p.lastLimit.detail : "")));
   }
@@ -364,10 +384,10 @@ export const USAGE_JS = `(() => {
     const jo = card("Jo · visitor limits", null, "jo");
     jo.append(meter("All visitors today", d.stats.jo.budgetUsed, L.globalDailyModelCalls,
       fmt(d.stats.jo.budgetUsed) + " of " + fmt(L.globalDailyModelCalls) + " questions · cached answers are free",
-      [chip(midnight, "reset", "↻ resets in")]));
+      countdown(midnight, "reset")));
     jo.append(meter("Per visitor", d.stats.jo.busiestVisitor, L.daily,
       "Busiest visitor: " + fmt(d.stats.jo.busiestVisitor) + " of " + fmt(L.daily) + " · " + fmt(d.stats.jo.visitorsToday) + " visitor" + (d.stats.jo.visitorsToday === 1 ? "" : "s") + " today",
-      [chip(midnight, "reset", "↻ resets in")]));
+      countdown(midnight, "reset")));
     jo.append(el("div", "sub", "Each visitor: " + fmt(L.burst) + " questions at once, then 1 more every " + L.refillSeconds + "s, up to " + fmt(L.daily) + " a day."));
     jo.append(el("div", "sub", "Answers: " + d.jo.models.map((m) => (MODELS[m] || [m])[0]).join(" → ") + " · reasoning " + d.jo.answerReasoning));
     root.append(jo);
