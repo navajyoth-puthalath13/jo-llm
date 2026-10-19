@@ -32,9 +32,10 @@ export function contentHash(systemPrompt: string): Promise<string> {
   return h;
 }
 
-export async function cacheKey(question: string, systemPrompt: string): Promise<string> {
+/** Flat and block answers never share an entry: the format is part of the key. */
+export async function cacheKey(question: string, systemPrompt: string, format: "flat" | "blocks" = "flat"): Promise<string> {
   const [content, q] = await Promise.all([contentHash(systemPrompt), sha256Hex(normalizeQuestion(question))]);
-  return `ans:${content}:${q.slice(0, 32)}`;
+  return format === "flat" ? `ans:${content}:${q.slice(0, 32)}` : `ans:${format}:${content}:${q.slice(0, 32)}`;
 }
 
 /** What a cache entry holds. Action ids are resolved against the catalog when read. */
@@ -69,9 +70,12 @@ export async function putCached(kv: KVNamespace, key: string, answer: CachedAnsw
   }
 }
 
-/** Splits a cached answer into small chunks so the client sees the same token stream as a live answer. */
+/**
+ * Splits a cached answer into small chunks so the client sees the same token stream as a live answer.
+ * A block separator ("\n\n", "\n- ", "\n1. ") always travels with the word after it, never alone.
+ */
 export function chunkAnswer(answer: string, wordsPerChunk = 2): string[] {
-  const words = answer.match(/\S+\s*/g) ?? [];
+  const words = answer.match(/(?:\n\n|\n- |\n\d{1,2}\. )?\S+[ \t]*/g) ?? [];
   const chunks: string[] = [];
   for (let i = 0; i < words.length; i += wordsPerChunk) chunks.push(words.slice(i, i + wordsPerChunk).join(""));
   return chunks;
