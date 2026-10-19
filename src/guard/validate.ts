@@ -38,6 +38,9 @@ export const AskSchema = z
       .max(20)
       .transform((h) => h.slice(-6))
       .optional(),
+    // "blocks": the answer may use paragraphs and one short list (docs/BUBBLE_CONTRACT.md).
+    // Absent: flat text, exactly as before. Any other value is invalid.
+    format: z.literal("blocks").optional(),
   })
   .strict();
 
