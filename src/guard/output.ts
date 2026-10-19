@@ -102,6 +102,8 @@ export function trimAnswer(text: string, format: AnswerFormat = "flat"): string 
 /** Blocks-mode inline tidy: like tidy(), but the three separators survive. */
 function tidyBlocks(s: string): string {
   return s
+    .replace(NO_BREAK, " ")
+    .replace(NO_BREAK_HYPHEN, "-")
     .replace(/\s*—\s*/g, ", ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n\n[ \t]+/g, "\n\n")
@@ -292,8 +294,15 @@ export function createBlockShaper(): { push(chunk: string): string; flush(): str
   };
 }
 
+// Non-breaking spaces and hyphens (some models write "Hackathon\u202f2025", "runner\u2011up") stop
+// the bubble from wrapping where it should. Plain characters wrap normally.
+const NO_BREAK = /[\u00a0\u202f\u2007\u2060]/g;
+const NO_BREAK_HYPHEN = /\u2011/g;
+
 function tidy(s: string): string {
   return s
+    .replace(NO_BREAK, " ")
+    .replace(NO_BREAK_HYPHEN, "-")
     // Em dashes read as machine-written; people type commas. En dashes (ranges) are left alone.
     .replace(/\s*—\s*/g, ", ")
     .replace(/\s*\n+\s*/g, " ")

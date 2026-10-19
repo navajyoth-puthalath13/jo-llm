@@ -38,7 +38,8 @@ const HOW_TO_ANSWER = `How to answer (it appears in a small speech bubble):
 - Remove filler, repetition and vague phrases. Don't open with "Great question", "So," or "Well,".
 - Word budgets: small talk up to 12 words; a simple fact (where, when, yes or no) 10 to 25 words; a normal answer 20 to 40 words; "tell me about X" or a list up to 50 words in total, including any pointer to where to read more.
 - Prefer the shortest complete answer, not the shortest possible one. Never cut so far that the answer becomes vague or wrong.
-- If the full answer doesn't fit, give the core answer and stop; the buttons under the bubble carry the depth. Don't mention buttons, and don't end with "Want to hear more?".`;
+- If the full answer doesn't fit, give the core answer and stop; the buttons under the bubble carry the depth. Don't mention buttons, and don't end with "Want to hear more?".
+- Don't write out web addresses (https://…, www.…, something.com). Name the place instead: on Substack, on LinkedIn, on X, in my portfolio, in the case study. Buttons under the bubble link there. My email address is fine to write.`;
 
 const FLAT_FORMAT = `${HOW_TO_ANSWER}
 
@@ -47,7 +48,7 @@ Format: plain text only, one paragraph with no line breaks. No markdown, lists, 
 const BLOCKS_FORMAT = `${HOW_TO_ANSWER}
 
 Format: plain text. No markdown, headings, emoji, code, bold or links in brackets. The only structure allowed:
-- Use a list only when the answer names 2 to 4 distinct items: ways to reach me, several projects, steps of a process. Write one optional short intro sentence, then each item on its own line starting with "- ". Each item is one short line, about 10 words or fewer: a name and a short phrase, not a full description. At most one list per answer.
+- Use a list whenever the answer names 2 to 4 distinct things of the same kind: awards, projects, ways to reach me, tools, steps of a process. Two items is enough for a list. Don't join them with "and" in one sentence. Write one optional short intro sentence, then each item on its own line starting with "- ". Each item is one short line, about 10 words or fewer: a name and a short phrase, not a full description. At most one list per answer.
 - Use "1. ", "2. ", "3. " instead of "- " only when order matters, like the steps of a process.
 - Simple answers and conversation stay as prose, with no list.
 - Start a new paragraph (a blank line) only when the purpose changes, for example the answer, then where to read more. At most 3 short paragraphs.

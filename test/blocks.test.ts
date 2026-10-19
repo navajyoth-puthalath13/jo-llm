@@ -70,6 +70,11 @@ describe("blocks format: allowed structure", () => {
     expect(blocks("It was\n-ish done in\n2025. Then more.")).toBe("It was -ish done in 2025. Then more.");
   });
 
+  it("turns non-breaking spaces and hyphens into plain ones, so the bubble can wrap", () => {
+    expect(blocks("First Prize, UI Alchemist Hackathon\u202f2025 and runner\u2011up.")).toBe("First Prize, UI Alchemist Hackathon 2025 and runner-up.");
+    expect(flat("Hackathon\u00a02025, runner\u2011up")).toBe("Hackathon 2025, runner-up");
+  });
+
   it("still filters links and em dashes", () => {
     expect(blocks("Find me:\n- https://evil.example.com\n- navajyoth.com — anytime")).toBe("Find me:\n- navajyoth.com, anytime");
   });
@@ -127,7 +132,11 @@ describe("blocks format: request, prompt and cache", () => {
     expect(flatPrompt).toContain("one paragraph with no line breaks");
     expect(flatPrompt).not.toContain('starting with "- "');
     expect(blockPrompt).toContain('starting with "- "');
-    for (const p of [flatPrompt, blockPrompt]) expect(p).toContain("small talk up to 12 words");
+    for (const p of [flatPrompt, blockPrompt]) {
+      expect(p).toContain("small talk up to 12 words");
+      expect(p).toContain("Don't write out web addresses");
+    }
+    expect(blockPrompt).toContain("Two items is enough for a list");
   });
 
   it("keys the cache by format", async () => {

@@ -311,8 +311,9 @@ export const EVAL_CASES: EvalCase[] = [
     name: "blocks: contact",
     input: { question: "how can I contact you?", format: "blocks" },
     contains: [["email", EMAIL], "LinkedIn", ["X", "Twitter"]],
-    shape: "bullets",
-    items: [3, 3],
+    never: [/https?:\/\//, "GitHub"],
+    // A one-line sentence or a 3-item list are both fine: the three buttons carry the links.
+    maxWords: 30,
     buttons: ["email", "linkedin", "x"],
     exactButtons: true,
   },
@@ -342,5 +343,20 @@ export const EVAL_CASES: EvalCase[] = [
     input: { question: "are you an AI?", format: "blocks" },
     contains: ["AI"],
     shape: "prose",
+  },
+  {
+    name: "blocks: awards",
+    input: { question: "what awards have you won?", format: "blocks" },
+    contains: ["UI Alchemist", "Designathon"],
+    shape: "bullets",
+    items: [2, 2],
+  },
+  {
+    name: "blocks: writing",
+    input: { question: "do you write anywhere?", format: "blocks" },
+    contains: ["Substack"],
+    never: [/https?:\/\//, "substack.com"],
+    shape: "prose",
+    buttons: ["substack"],
   },
 ];
