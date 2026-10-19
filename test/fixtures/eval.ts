@@ -7,6 +7,9 @@
 // - never: phrases or patterns that must not appear (invented facts, forbidden claims).
 // - buttons: ids that must be offered. `exactButtons` means exactly these, in this order.
 // - decline: the answer must be the off-topic decline, with no buttons.
+// - maxWords: word ceiling (every answer is held to 60 at most).
+// - shape: "prose" (no list), "bullets" or "numbered", with `items` as [min, max] for lists.
+//   Shapes only mean something for `format: "blocks"` cases.
 import type { AskInput } from "../../src/guard/validate";
 
 export interface EvalCase {
@@ -22,11 +25,17 @@ export interface EvalCase {
   decline?: boolean;
   /** Either an answer that passes the checks or the off-topic decline is fine. */
   declineOk?: boolean;
+  maxWords?: number;
+  shape?: "prose" | "bullets" | "numbered";
+  items?: [number, number];
 }
+
+/** Every eval answer is held to this many words at most. */
+export const MAX_EVAL_WORDS = 60;
 
 const EMAIL = "navajyothputalath13@gmail.com";
 const POINTS_TO_EMAIL = [EMAIL, "email"];
-const NOT_SHARED = ["cup of tea", "haven't shared", "have not shared", "not shared", "haven't published", "not something i've shared", EMAIL, "email"];
+const NOT_SHARED = ["cup of coffee", "cup of tea", "haven't shared", "have not shared", "not shared", "haven't published", "not something i've shared", EMAIL, "email"];
 
 export const EVAL_CASES: EvalCase[] = [
   // Projects
@@ -282,5 +291,56 @@ export const EVAL_CASES: EvalCase[] = [
     files: ["care-scribe"],
     contains: [["proposed", "outside my assigned", "independently", "explored", "contribution"]],
     never: ["I led the team"],
+  },
+
+  // Bubble shapes (format: "blocks", docs/BUBBLE_CONTRACT.md)
+  {
+    name: "blocks: hi",
+    input: { question: "hi", format: "blocks" },
+    shape: "prose",
+    maxWords: 12,
+  },
+  {
+    name: "blocks: where based",
+    input: { question: "where are you based?", format: "blocks" },
+    contains: ["Kerala"],
+    shape: "prose",
+    maxWords: 25,
+  },
+  {
+    name: "blocks: contact",
+    input: { question: "how can I contact you?", format: "blocks" },
+    contains: [["email", EMAIL], "LinkedIn", ["X", "Twitter"]],
+    shape: "bullets",
+    items: [3, 3],
+    buttons: ["email", "linkedin", "x"],
+    exactButtons: true,
+  },
+  {
+    name: "blocks: projects",
+    input: { question: "what projects have you worked on?", format: "blocks" },
+    shape: "bullets",
+    items: [2, 4],
+  },
+  {
+    name: "blocks: design process",
+    input: { question: "walk me through your design process", format: "blocks" },
+    shape: "numbered",
+    items: [3, 4],
+  },
+  {
+    name: "blocks: care scribe",
+    input: { question: "tell me about CARE Scribe", format: "blocks" },
+    contains: [["proposed", "proposing", "not shipped", "hasn't shipped", "hasn’t shipped", "has not shipped", "wasn't shipped", "didn't ship", "direction"]],
+    never: ["was launched", "is live", "now used", "adopted by", "rolled out"],
+    shape: "prose",
+    maxWords: 50,
+    buttons: ["care-scribe"],
+  },
+  {
+    name: "blocks: are you an AI",
+    input: { question: "are you an AI?", format: "blocks" },
+    contains: ["AI"],
+    shape: "prose",
   },
 ];

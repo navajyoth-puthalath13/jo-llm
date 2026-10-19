@@ -25,11 +25,22 @@ Send it with `Content-Type: application/json` and an allowed `Origin`. The body 
   "question": "1–300 chars",
   "quote": "optional, selected text, truncated to 1000",
   "page": "optional pathname, ≤100 chars",
+  "format": "optional, \"blocks\" for structured bubble text",
   "history": [{ "q": "…", "a": "…" }]
 }
 ```
 
-`history` keeps only the last 6 exchanges; each `q` is truncated to 300 characters and each `a` to 600. The server never stores it.
+`history` keeps only the last 6 exchanges; each `q` is truncated to 300 characters and each `a` to 600. The server never stores it. Send past answers flattened to one line (blocks joined with a space); history is always validated as plain text.
+
+**`format`** ([`docs/BUBBLE_CONTRACT.md`](docs/BUBBLE_CONTRACT.md)). Without it, answers are flat text with every newline collapsed, exactly as before. With `"format": "blocks"`, the `token` text may contain exactly three kinds of structure, and nothing else (no markdown, HTML, emoji, headings or nested lists):
+
+| Text | Meaning |
+|---|---|
+| `\n\n` | new paragraph |
+| `\n- ` | bullet item, up to the next `\n` |
+| `\n1. `, `\n2. `, `\n3. ` | numbered items, in order (only when order matters) |
+
+The backend guarantees at most 3 paragraphs and at most one list, with 2 to 4 one-line items, optionally after a single intro sentence. A list that opens the answer starts with `\n- `. A token never ends in a bare `\n` or `\n-`: a separator always arrives whole, usually with the word after it. Render it as text nodes only, never as HTML. Any other `format` value is `invalid`. Flat and block answers are cached separately.
 
 The response is `text/event-stream` and uses only these events:
 
@@ -48,6 +59,17 @@ The response is `text/event-stream` and uses only these events:
 - `actions` comes after the last `token` and before `done`, only when Jo offers at least one button. It never comes with an `error`. Label, href and kind come from the catalog in `content/actions.ts`, never from the model. `internal` hrefs are paths on navajyoth.com. Old clients can ignore the event.
 
 - A `403` with a plain-text body means the origin is not allowed. Browsers won't let you read it anyway.
+
+## Bubble writing rules
+
+Answers appear in a small comic speech bubble (about 32 to 38 characters a line, comfortable up to 7 lines). The rules live in one place, [`src/prompt.ts`](src/prompt.ts); [`voice.md`](content/knowledge/voice.md) keeps tone and wording only.
+
+- Open with the answer in the first few words; add only the detail needed to be accurate, keeping qualifiers that change the meaning ("proposed, not shipped").
+- Word budgets: small talk up to 12; a simple fact 10 to 25; a normal answer 20 to 40; "tell me about X" or a list up to 50 in total. The shortest *complete* answer, never a vague one.
+- Blocks only: a list only for 2 to 4 distinct items (ways to reach me, projects, steps); numbers only when order matters; a new paragraph only when the purpose changes; never a line break just to shorten lines.
+- If it doesn't fit, give the core answer and let the buttons carry the depth. Never mention buttons or end with "Want to hear more?".
+
+The 240-token cap stays as a safety net; past three quarters of it, text is released only in whole sentences or whole list items. In blocks mode, cheap checks run on every answer: a filler opener ("Great question!", "So,", "Well,") is stripped, an exact repeated sentence is dropped from the saved answer, and answers over 60 words are flagged in debug traces. `npm run eval` checks shape and length too.
 
 ## How a question flows
 
@@ -77,7 +99,7 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
 
 **Budget:** one visitor question counts as one unit of `DAILY_BUDGET`, however many calls it makes. Routing and buttons are small calls (about 1,000 and 500 tokens) on `gpt-oss-20b`, which has its own Groq quota separate from the answer model's. Cached answers cost nothing and make no calls.
 
-**Cache:** the key covers the normalised question plus a hash of every knowledge file, the rules and the button catalog. Buttons are cached with the answer.
+**Cache:** the key covers the normalised question, the `format`, and a hash of every knowledge file, the rules and the button catalog. Buttons are cached with the answer.
 
 ## The model chain
 
