@@ -92,6 +92,13 @@ const entries: JoAction[] = [
   },
   // Sections of the site
   {
+    id: "all-work",
+    label: "See my full work",
+    href: "/#work",
+    kind: "internal",
+    when: "secondary button after an answer about one specific project",
+  },
+  {
     id: "work",
     label: "See my work",
     href: "/#work",

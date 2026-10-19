@@ -85,17 +85,24 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
    - then short grounding rules ([`src/prompt.ts`](src/prompt.ts)).
 
    Streaming, the sentinel gate, the leak checks and the output sanitizer are unchanged. The answer is capped at 240 tokens; past three quarters of the cap, text is released only in whole sentences, so a capped answer ends at a full stop.
-3. **Buttons** ([`src/buttons.ts`](src/buttons.ts)). A structured call gets the question, Jo's final answer, the page, the intent and the catalog (ids and `when` lines, never hrefs), and proposes ids. Budget 1 s. Then fixed rules in code decide:
-   - contact → `email`, `linkedin`, `x`, in that order, plus `substack` when the answer mentions it (never GitHub)
-   - resume → only `resume`
-   - a named project → that project's button first
-   - `work_overview` → `work`
-   - private → `email` only, and only if the answer points to email
-   - small talk → `about` ("More about me")
-   - never the page the visitor is already on
-   - at most 3 (4 for contact), no duplicates
+3. **Buttons** ([`src/buttons.ts`](src/buttons.ts)). Order is meaning: the portfolio shows the first button as primary (filled) and the rest as secondary (outlined). Fixed rules in code decide, and win over the model:
 
-   If the call fails, the routed files' `actions` frontmatter goes through the same rules. Contact, private and small-talk questions skip the call entirely.
+   | Intent | Buttons, in order |
+   |---|---|
+   | one specific project | that project, then `all-work` ("See my full work") |
+   | work overview | `work`, then `system` |
+   | who are you / are you an AI / about | `email`, then `about` |
+   | contact | `email`, `linkedin`, `x` (the only case with 3) |
+   | resume | `resume`, then `email` |
+   | private | `email` |
+   | how I work / process | `work`, then `about` |
+   | availability | `email`, then `resume` |
+   | small talk | none |
+   | anything else (experience, writing, photography…) | a structured call's picks (ids and `when` lines, never hrefs; budget 1 s; the routed files' `actions` if it fails), with `substack` / `photography` first for writing / photography |
+
+   Across all of them: an answer that mentions emailing always gets `email`, first unless a project or the resume leads (then second), with `about` after it if nothing else fits. Never the page the visitor is on (the next button moves up; a removed `all-work` isn't replaced). No duplicates, never `work` and `all-work` together, `all-work` only right after a project. At most 2, contact 3. Only the "anything else" row makes a model call.
+
+   In blocks mode the answer text never carries a URL or an email address; the buttons do. The prompt asks for that, and the sanitizer removes any that slip through, along with lead-ins like "Read more:" or "email me at".
 
 **Budget:** one visitor question counts as one unit of `DAILY_BUDGET`, however many calls it makes. Routing and buttons are small calls (about 1,000 and 500 tokens) on `gpt-oss-20b`, which has its own Groq quota separate from the answer model's. Cached answers cost nothing and make no calls.
 

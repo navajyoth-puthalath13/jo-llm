@@ -69,6 +69,44 @@ function filterLinks(text: string, allowlist: string[]): string {
   return out;
 }
 
+// Blocks mode never shows a link or an email address, even an allowed one: the buttons carry them
+// (docs/BUBBLE_CONTRACT.md). Each one is cut out, then the words that only pointed at it go too:
+// "Read more: <url>" disappears, "email me at <email>." becomes "email me.", "portfolio: <url>"
+// becomes "portfolio.". Leak and allowlist checks still run on the raw text.
+const GONE = "\u0000";
+const LEAD_IN_WORDS = String.raw`read more|more here|here(?:'|’)s the link|the link|link|here|see|at|via`;
+const LEAD_IN_BEFORE_GONE = new RegExp(String.raw`[ \t]*\b(?:${LEAD_IN_WORDS})\b[ \t]*:?[ \t]*\u0000`, "gi");
+/** A segment ending in words that may lead into a link (or the start of such a phrase): held until the next word shows. */
+export const LEAD_IN_TAIL = new RegExp(
+  String.raw`(?:\b(?:read(?: more)?|more(?: here)?|here(?:'|’)s(?: the(?: link)?)?|the(?: link)?|link|here|see|at|via)\b[ \t]*:?|\S*:)[ \t]*$`,
+  "i",
+);
+// Stands in for the text already sent, so a segment's first words are judged in context.
+const PREV = "\u0001";
+
+/** `prev` is the last character already shown (segments always meet at whitespace). */
+function dropLinks(text: string, prev = ""): string {
+  const prefix = prev ? prev + PREV : "";
+  let out = (prefix + text).replace(EMAIL_RE, GONE);
+  out = out.replace(URL_RE, (url, offset: number, whole: string) => {
+    if (whole.charAt(offset - 1) === GONE) return GONE; // rest of an email
+    return GONE + (url.match(/[.,;:!?'"]+$/)?.[0] ?? "");
+  });
+  return out
+    .replace(/[ \t]*\([ \t]*\u0000+[ \t]*\)/g, GONE)
+    .replace(LEAD_IN_BEFORE_GONE, GONE)
+    .replace(/[ \t]*:?[ \t]*\u0000+([.!?,;:]?)/g, (m, punct: string, offset: number, whole: string) => {
+      const head = whole.slice(0, offset).replace(/\u0001/g, "");
+      // Right after a list marker ("- ", "1. ") the link was the whole item: leave nothing.
+      const before = /(?:^|\n)(?:-|\d{1,2}\.)$/.test(head) ? "" : head.slice(-1);
+      const endsHere = /^[ \t]*(?:\n|$)/.test(whole.slice(offset + m.length));
+      if (punct && punct !== ":" && !(punct === "," && endsHere)) return !before || /[.!?\n]/.test(before) ? "" : punct;
+      // The link ended the sentence: close it, unless it already ends with punctuation.
+      return endsHere && before && !/[.!?:\n]/.test(before) ? "." : "";
+    })
+    .slice(prefix.length);
+}
+
 function stripMarkup(text: string, atLineStart: boolean, blocks = false): string {
   let out = text
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1") // images → alt text
@@ -352,7 +390,7 @@ export function createStreamSanitizer(allowlist: string[], format: AnswerFormat 
   // filter disappears instead of showing a lone dash.
   let heldMarker = "";
   const releaseBlocks = (segment: string): string => {
-    const cleaned = tidyBlocks(filterLinks(stripMarkup(segment, atLineStart, true), allowlist)).replace(
+    const cleaned = tidyBlocks(dropLinks(stripMarkup(segment, atLineStart, true), lastOut.slice(-1))).replace(
       /\n(?:-|\d{1,2}\.)[ \t]*(?=\n|$)/g,
       (m, offset: number, whole: string) => (offset + m.length === whole.length ? m : ""),
     );
@@ -397,9 +435,16 @@ export function createStreamSanitizer(allowlist: string[], format: AnswerFormat 
       pending += shaper ? shaper.push(chunk) : chunk;
       const cut = Math.max(pending.lastIndexOf(" "), pending.lastIndexOf("\n"), pending.lastIndexOf("\t"));
       if (cut === -1) return pending.length > MAX_HOLD ? this.flush() : "";
-      const ready = pending.slice(0, cut + 1);
+      let ready = pending.slice(0, cut + 1);
       if (unbalanced(ready) && pending.length <= MAX_HOLD) return "";
-      pending = pending.slice(cut + 1);
+      // Blocks: words that may lead into a link ("Read more:", "at") wait for the next word, so
+      // they can go with the link.
+      if (blocks && pending.length <= MAX_HOLD) {
+        const lead = LEAD_IN_TAIL.exec(ready);
+        if (lead) ready = ready.slice(0, lead.index);
+      }
+      if (!ready) return "";
+      pending = pending.slice(ready.length);
       return release(ready);
     },
     flush() {

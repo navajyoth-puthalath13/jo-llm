@@ -7,7 +7,8 @@
 // - never: phrases or patterns that must not appear (invented facts, forbidden claims).
 // - buttons: ids that must be offered. `exactButtons` means exactly these, in this order.
 // - decline: the answer must be the off-topic decline, with no buttons.
-// - maxWords: word ceiling (every answer is held to 60 at most).
+// - maxWords: word ceiling (every answer is held to 60 at most). No answer may show a URL or an
+//   email address: the buttons carry them.
 // - shape: "prose" (no list), "bullets" or "numbered", with `items` as [min, max] for lists.
 //   Shapes only mean something for `format: "blocks"` cases.
 import type { AskInput } from "../../src/guard/validate";
@@ -26,6 +27,8 @@ export interface EvalCase {
   /** Either an answer that passes the checks or the off-topic decline is fine. */
   declineOk?: boolean;
   maxWords?: number;
+  /** Word ceiling per list item (default 12). */
+  itemWords?: number;
   shape?: "prose" | "bullets" | "numbered";
   items?: [number, number];
 }
@@ -120,7 +123,8 @@ export const EVAL_CASES: EvalCase[] = [
     name: "show me all your work",
     input: { question: "Show me all your work" },
     files: ["overview"],
-    buttons: ["work"],
+    buttons: ["work", "system"],
+    exactButtons: true,
   },
   // About me
   {
@@ -184,17 +188,19 @@ export const EVAL_CASES: EvalCase[] = [
     never: ["yes, I do freelance", "I'm available for freelance"],
   },
   {
-    name: "start date (TODO, must not guess)",
+    name: "start date",
     input: { question: "When can you start?" },
-    contains: [POINTS_TO_EMAIL],
-    never: ["two weeks", "2 weeks", "1-2 weeks", "one or two weeks", "immediately", "next month", "no notice period"],
+    contains: [["right away", "immediately", "no notice period"]],
+    never: ["two weeks", "2 weeks", "1-2 weeks", "one or two weeks", "next month"],
+    buttons: ["email", "resume"],
+    exactButtons: true,
   },
   // Resume and contact
   {
     name: "resume",
     input: { question: "Can I see your resume?" },
     never: ["download", "drive.google.com"],
-    buttons: ["resume"],
+    buttons: ["resume", "email"],
     exactButtons: true,
   },
   {
@@ -267,7 +273,7 @@ export const EVAL_CASES: EvalCase[] = [
     name: "greeting",
     input: { question: "hey" },
     contains: [["How can I help you today"]],
-    buttons: ["about"],
+    buttons: [],
     exactButtons: true,
   },
   { name: "off-topic", input: { question: "What is the capital of France?" }, decline: true },
@@ -320,6 +326,8 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "blocks: projects",
     input: { question: "what projects have you worked on?", format: "blocks" },
+    buttons: ["work", "system"],
+    exactButtons: true,
     shape: "bullets",
     items: [2, 4],
   },
@@ -328,6 +336,9 @@ export const EVAL_CASES: EvalCase[] = [
     input: { question: "walk me through your design process", format: "blocks" },
     shape: "numbered",
     items: [3, 4],
+    itemWords: 8,
+    buttons: ["work", "about"],
+    exactButtons: true,
   },
   {
     name: "blocks: care scribe",
@@ -336,13 +347,16 @@ export const EVAL_CASES: EvalCase[] = [
     never: ["was launched", "is live", "now used", "adopted by", "rolled out"],
     shape: "prose",
     maxWords: 50,
-    buttons: ["care-scribe"],
+    buttons: ["care-scribe", "all-work"],
+    exactButtons: true,
   },
   {
     name: "blocks: are you an AI",
     input: { question: "are you an AI?", format: "blocks" },
-    contains: ["AI"],
+    contains: ["AI", "email"],
     shape: "prose",
+    buttons: ["email", "about"],
+    exactButtons: true,
   },
   {
     name: "blocks: awards",
