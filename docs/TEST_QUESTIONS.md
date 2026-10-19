@@ -11,10 +11,10 @@ npm run ask -- "your question" --url https://jo-llm.navajyothputalath13.workers.
 Each row says what a good answer looks like and which buttons should appear. "Buttons" lists what Jo *should* offer; Jo may skip a button now and then, but he must **never** show a button that doesn't fit, or any button on a decline.
 
 What every answer should feel like:
-- The shortest complete answer: small talk up to 12 words, a simple fact up to 25, most answers 20 to 40, never over 60.
+- One to four short sentences.
 - Leads with the answer.
 - Sounds like you talking, not a CV.
-- No em dashes. A short list only in `format: "blocks"`, and only for 2 to 4 distinct items.
+- No em dashes and no lists.
 - No made-up facts.
 
 > Groq's free tier is shared by everyone. If you fire many questions in a row you may see "I'm a little overloaded today". Wait a minute and try again. That's quota, not a bug.

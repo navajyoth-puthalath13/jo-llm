@@ -8,7 +8,7 @@ import { BUTTON_RULES_VERSION, pickButtons } from "./buttons";
 import type { Config } from "./config";
 import type { AskInput } from "./guard/validate";
 import { renderKnowledge, type Knowledge } from "./knowledge";
-import { buildSystemPrompt, buildUserMessage, rulesFor } from "./prompt";
+import { buildSystemPrompt, buildUserMessage, RULES } from "./prompt";
 import { firstTokenTimeouts } from "./providers/router";
 import type { Provider } from "./providers/types";
 import { filesForAnswer, routeQuestion, type Route } from "./route";
@@ -16,7 +16,7 @@ import { filesForAnswer, routeQuestion, type Route } from "./route";
 /** Everything an answer depends on. Any change to a knowledge file, the rules or the catalog
  *  changes this, which invalidates cached answers (the button rules too: cached answers keep their buttons). */
 export function answerCacheScope(knowledge: Knowledge): string {
-  return `${knowledge.fingerprint}\n${rulesFor("flat")}\n${rulesFor("blocks")}\n${catalogFingerprint()}\nbuttons:${BUTTON_RULES_VERSION}`;
+  return `${knowledge.fingerprint}\n${RULES}\n${catalogFingerprint()}\nbuttons:${BUTTON_RULES_VERSION}`;
 }
 
 export interface JoRunOptions {
@@ -68,8 +68,7 @@ export async function runJo(o: JoRunOptions): Promise<JoResult> {
 
   // 2. Answer from the always-files plus the routed files.
   const files = filesForAnswer(o.knowledge, route);
-  const format = o.input.format ?? "flat";
-  const system = buildSystemPrompt(renderKnowledge(o.knowledge, files), format);
+  const system = buildSystemPrompt(renderKnowledge(o.knowledge, files));
   t("8 prompt", `always-files + ${files.length ? files.join(", ") : "nothing else"}; visitor text in tags:\n${buildUserMessage(o.input)}`);
   t("9 model", `trying ${o.answerProviders.map((p) => p.name).join(" → ")}`);
   const outcome = await generateAnswer({
@@ -80,7 +79,6 @@ export async function runJo(o: JoRunOptions): Promise<JoResult> {
     timeoutsMs: firstTokenTimeouts(o.answerProviders, o.config),
     totalTimeoutMs: o.config.totalTimeoutMs,
     linkAllowlist: o.linkAllowlist,
-    format,
     signal: o.signal,
     onText: o.onText,
     log: (p, r) => {
