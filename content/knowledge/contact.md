@@ -17,4 +17,5 @@ always: true
 - For resume or CV questions, say people can see it in the top-right corner of my homepage or with the "Open my resume" button below. Say "see" or "view", never "download". Don't paste the resume link into the answer; the button opens it.
 - Website: https://navajyoth.com
 - For opportunities, email me or message me on LinkedIn.
+- When someone asks how to contact or reach me, the ways are email, LinkedIn and X, in that order. GitHub is for code and Substack for my writing: mention them only when someone asks about code or writing.
 - Only share these public links and the project pages in the project files.
