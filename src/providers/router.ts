@@ -80,13 +80,35 @@ const TIMEOUT = Symbol("timeout");
  * Errors, timeouts and empty streams before the first chunk fall through to the next provider.
  * Safety blocks do not fall through: another model shouldn't get a second go at the same input.
  */
+// A per-minute limit (Groq: 8,000 tokens a minute) clears in seconds. When that's all that stands
+// between the visitor and an answer, waiting beats "busy". Daily limits never wait.
+const MAX_MINUTE_WAIT_S = 20;
+
+/** Seconds until a per-minute limit clears, or null if this 429 isn't a short per-minute one. */
+export function minuteLimitWait(err: ProviderHttpError): number | null {
+  if (err.status !== 429) return null;
+  if (err.detail && !/per minute/i.test(err.detail)) return null;
+  const fromDetail = /retry in (?:(\d+)m)?([\d.]+)s/.exec(err.detail ?? "");
+  const wait = fromDetail ? Number(fromDetail[1] ?? 0) * 60 + Number(fromDetail[2]) : err.retryAfterSeconds;
+  return wait !== undefined && wait <= MAX_MINUTE_WAIT_S ? wait : null;
+}
+
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => (clearTimeout(t), resolve()), { once: true });
+  });
+
 export async function openStream(
   providers: Provider[],
   req: ProviderRequest,
   timeoutsMs: number[],
   signal: AbortSignal,
   log: (provider: string, outcome: string) => void = () => {},
+  /** Internal: whether a short per-minute limit may still be waited out once. */
+  mayWait = true,
 ): Promise<OpenedStream> {
+  let soonest: { index: number; wait: number } | null = null;
   // If every model is cooling down, try them all anyway rather than failing without asking.
   const allCooling = providers.every((p) => isCooling(p.name));
   for (let i = 0; i < providers.length; i++) {
@@ -134,12 +156,23 @@ export async function openStream(
         ctrl.abort();
         throw new RouteError("blocked");
       }
-      if (err instanceof ProviderHttpError && err.status === 429) noteRateLimited(provider.name, err.retryAfterSeconds);
+      if (err instanceof ProviderHttpError && err.status === 429) {
+        noteRateLimited(provider.name, err.retryAfterSeconds);
+        const wait = minuteLimitWait(err);
+        if (wait !== null && (!soonest || wait < soonest.wait)) soonest = { index: i, wait };
+      }
       log(provider.name, err instanceof ProviderHttpError ? `http_${err.status}` : "error");
       ctrl.abort();
     } finally {
       clearTimeout(timer);
     }
+  }
+  // Every model failed, but one only hit its per-minute limit: wait it out and ask that one again.
+  if (soonest && mayWait && !signal.aborted) {
+    const i = soonest.index;
+    log(providers[i]!.name, `waiting_${Math.ceil(soonest.wait)}s_for_minute_limit`);
+    await sleep(soonest.wait * 1000 + 300, signal);
+    if (!signal.aborted) return openStream([providers[i]!], req, [timeoutsMs[i] ?? timeoutsMs[timeoutsMs.length - 1] ?? 5000], signal, log, false);
   }
   throw new RouteError("busy");
 }

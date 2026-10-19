@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { openStream } from "../src/providers/router";
-import { ProviderBlockedError, type Provider } from "../src/providers/types";
+import { openStream, resetCooldowns } from "../src/providers/router";
+import { ProviderBlockedError, ProviderHttpError, type Provider } from "../src/providers/types";
 import { answerText, ask, errorCode, mockProvider, readEvents, setup } from "./helpers";
 
 const req = { system: "s", user: "u", maxTokens: 10 };
@@ -99,6 +99,52 @@ describe("429 cooldown", () => {
     await openStream([limited, backup], req, [1000, 1000], new AbortController().signal, log);
     expect(limited.calls).toBe(1);
     expect(outcomes).toEqual(["limited:http_429", "limited:skipped_cooling"]);
+    resetCooldowns();
+  });
+
+  it("waits out a short per-minute limit once instead of saying busy", async () => {
+    resetCooldowns();
+    const flaky = (name: string, detail: string, failures: number): Provider & { calls: number } => ({
+      name,
+      calls: 0,
+      async *stream() {
+        this.calls++;
+        if (this.calls <= failures) throw new ProviderHttpError(429, undefined, detail);
+        yield "answer";
+      },
+    });
+    const daily = flaky("daily", "tokens per day: used 199,000 of 200,000, needed 3,000; retry in 9m0s", 99);
+    const minute = flaky("minute", "tokens per minute: used 6,353 of 8,000, needed 4,243; retry in 0.05s", 1);
+    const outcomes: string[] = [];
+    const opened = await openStream([daily, minute], req, [1000, 1000], new AbortController().signal, (n, r) => outcomes.push(`${n}:${r}`));
+    expect(opened.provider).toBe("minute");
+    expect(daily.calls).toBe(1); // a daily limit is never retried
+    expect(minute.calls).toBe(2);
+    expect(outcomes).toContain("minute:waiting_1s_for_minute_limit");
+    resetCooldowns();
+  });
+
+  it("doesn't wait for a daily limit, a long wait, or a second time", async () => {
+    resetCooldowns();
+    const always = (name: string, detail: string): Provider => ({
+      name,
+      // eslint-disable-next-line require-yield
+      async *stream() {
+        throw new ProviderHttpError(429, undefined, detail);
+      },
+    });
+    const started = Date.now();
+    await expect(openStream([always("d", "tokens per day: used 1 of 2; retry in 3s")], req, [1000], new AbortController().signal)).rejects.toThrow(
+      "busy",
+    );
+    await expect(openStream([always("l", "tokens per minute: used 1 of 2; retry in 45s")], req, [1000], new AbortController().signal)).rejects.toThrow(
+      "busy",
+    );
+    expect(Date.now() - started).toBeLessThan(500);
+    // A per-minute limit that's still there after the wait: busy, no endless loop.
+    await expect(
+      openStream([always("m", "tokens per minute: used 1 of 2; retry in 0.05s")], req, [1000], new AbortController().signal),
+    ).rejects.toThrow("busy");
     resetCooldowns();
   });
 });
