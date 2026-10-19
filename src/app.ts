@@ -167,7 +167,7 @@ export function createApp(deps: AppDeps) {
     trace("4 limits", "✓ under the per-IP limits");
 
     const cacheable = !input.quote && !input.history?.length;
-    const key = cacheable ? await cacheKey(input.question, cacheScope, input.format ?? "flat") : null;
+    const key = cacheable ? await cacheKey(input.question, cacheScope) : null;
     if (!key) trace("5 cache", "skipped: questions with a quote or history are never cached");
 
     if (key) {

@@ -2,7 +2,7 @@
 // Runtime-agnostic (no Workers imports) so scripts can reuse it from Node.
 
 import { createTagSplitter } from "./actions";
-import { createStreamSanitizer, containsLeak, trimAnswer, type AnswerFormat } from "./guard/output";
+import { createStreamSanitizer, containsLeak } from "./guard/output";
 import { detectSentinel, type SentinelState } from "./guard/offtopic";
 import { openStream, RouteError } from "./providers/router";
 import type { Provider } from "./providers/types";
@@ -15,8 +15,6 @@ export interface AnswerOptions {
   timeoutsMs: number[];
   totalTimeoutMs: number;
   linkAllowlist: string[];
-  /** "blocks" allows paragraphs and one short list (docs/BUBBLE_CONTRACT.md). Default "flat". */
-  format?: AnswerFormat;
   signal: AbortSignal;
   /** Receives sanitized text as soon as it is safe to show. Throwing stops generation. */
   onText: (text: string) => Promise<void>;
@@ -36,41 +34,7 @@ export function lastSentenceEnd(text: string): number {
   return end;
 }
 
-/** Like lastSentenceEnd, but the end of a list item or paragraph (just before a "\n") also counts. */
-export function lastBoundary(text: string, format: AnswerFormat): number {
-  const sentence = lastSentenceEnd(text);
-  if (format === "flat") return sentence;
-  const nl = text.lastIndexOf("\n");
-  return Math.max(sentence, nl > 0 ? nl : 0);
-}
-
-// Openers that only fill space. Stripped from the start of block answers (the prompt asks too).
-const FILLER_OPENER = /^(?:great question|good question|so|well)[,.!]+(?:\s+|$)/i;
-
-/** Removes a filler opener and capitalises what follows. */
-export function stripFillerOpener(text: string): string {
-  const m = FILLER_OPENER.exec(text);
-  if (!m) return text;
-  const rest = text.slice(m[0].length);
-  return rest.charAt(0).toUpperCase() + rest.slice(1);
-}
-
-/** Drops a sentence that repeats an earlier one word for word (case and spacing ignored). */
-export function dropRepeatedSentences(text: string): string {
-  const seen = new Set<string>();
-  return text.replace(/[^.!?\n]+[.!?]+["'”’)]*[ \t]*/g, (sentence) => {
-    const key = sentence.toLowerCase().replace(/\s+/g, " ").trim();
-    if (key.length < 12) return sentence;
-    if (seen.has(key)) return "";
-    seen.add(key);
-    return sentence;
-  }).replace(/[ \t]+(\n|$)/g, "$1");
-}
-
-export const wordCount = (text: string) => (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’.@-]*/gu) ?? []).filter((w) => !/^\d+\.$/.test(w)).length;
-
 export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
-  const format = o.format ?? "flat";
   const ctrl = new AbortController();
   const abort = () => ctrl.abort();
   o.signal.addEventListener("abort", abort, { once: true });
@@ -95,7 +59,7 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
     provider = opened.provider;
     o.trace?.("9 model", `${provider} answered first: ${JSON.stringify(opened.first)}`);
 
-    const sanitizer = createStreamSanitizer(o.linkAllowlist, format);
+    const sanitizer = createStreamSanitizer(o.linkAllowlist);
     // Everything from "[[" on is held back and never shown: a guard in case a model still writes
     // an old-style [[ACT:…]] tag or other bracketed markup.
     const splitter = createTagSplitter();
@@ -111,18 +75,7 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
     const softChars = Math.floor(maxChars * 0.75);
     let capped = false;
     let tail = "";
-    // Blocks: the opening few words are held until a filler opener ("So,", "Great question!") can
-    // be ruled out or stripped.
-    let opening = format === "blocks" ? "" : null;
-    const send = async (text: string, final = false) => {
-      if (opening !== null) {
-        opening += text;
-        if (!final && wordCount(opening) < 4) return;
-        const stripped = stripFillerOpener(opening);
-        if (stripped !== opening) o.trace?.("10 output", `stripped a filler opener: ${JSON.stringify(opening.slice(0, opening.length - stripped.length))}`);
-        text = stripped;
-        opening = null;
-      }
+    const send = async (text: string) => {
       if (!text) return;
       emitted += text;
       await o.onText(text);
@@ -134,14 +87,14 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
       const room = maxChars - emitted.length;
       if (tail.length > room) {
         const window = tail.slice(0, room);
-        const cut = lastBoundary(window, format) || window.replace(/\S*$/, "").length;
+        const cut = lastSentenceEnd(window) || window.replace(/\S*$/, "").length;
         await send(window.slice(0, cut));
         tail = "";
         capped = true;
-        o.trace?.("10 output", "length cap reached, trimmed to the last full sentence or list item");
+        o.trace?.("10 output", "length cap reached, trimmed to the last full sentence");
         return;
       }
-      const cut = lastBoundary(tail, format);
+      const cut = lastSentenceEnd(tail);
       if (cut) {
         await send(tail.slice(0, cut));
         tail = tail.slice(cut);
@@ -151,7 +104,6 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
     const flushTail = async () => {
       if (!capped && tail) await send(tail);
       tail = "";
-      if (opening) await send("", true);
     };
 
     /** Returns false when the answer must be replaced with a decline. */
@@ -222,22 +174,12 @@ export async function generateAnswer(o: AnswerOptions): Promise<AnswerOutcome> {
     await flushTail();
     if (containsLeak(raw)) return declineWith("leak marker");
     t("10 output", `raw model text: ${JSON.stringify(raw)}`);
-    t("10 output", `sent to browser:  ${JSON.stringify(trimAnswer(emitted, format))}`);
+    t("10 output", `sent to browser:  ${JSON.stringify(emitted.trim())}`);
     if (!emitted.trim()) return { ok: false, code: "busy", provider, partial: false };
-    // Cheap checks on the finished answer. A repeated sentence was already shown live, but it's
-    // dropped from what's cached and returned. Long answers are kept and flagged for evals.
-    let text = trimAnswer(emitted, format);
-    if (format === "blocks") {
-      const deduped = trimAnswer(dropRepeatedSentences(text), format);
-      if (deduped !== text) t("10 output", "dropped a repeated sentence from the saved answer");
-      text = deduped;
-    }
-    const words = wordCount(text);
-    if (words > 60) t("10 output", `⚠ long answer: ${words} words (target 60 or fewer)`);
     // The answer model no longer picks buttons (see buttons.ts). Any bracketed tail it still
     // writes was held back above and is ignored here.
     if (splitter.held) t("10 output", `ignored a bracketed tail: ${JSON.stringify(splitter.held.trim().slice(0, 60))}`);
-    return { ok: true, text, provider };
+    return { ok: true, text: emitted.trim(), provider };
   } finally {
     clearTimeout(total);
     o.signal.removeEventListener("abort", abort);
