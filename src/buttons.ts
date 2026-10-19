@@ -15,7 +15,7 @@ import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
 /** Bump when the rules below change, so cached answers pick up the new buttons. */
-export const BUTTON_RULES_VERSION = 4;
+export const BUTTON_RULES_VERSION = 5;
 
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -146,8 +146,12 @@ const DECIDED: Partial<Record<Intent, string[]>> = {
  * an answer naming two or more projects is an overview, and small talk that invites email
  * ("are you an AI?", often routed as small talk) is about him.
  */
+const IDENTITY = /\b(?:are you (?:an? )?(?:ai|bot|robot|real|human|person|chatgpt|llm)|who are you|who is this|who am i (?:talking|speaking) (?:to|with)|what are you)\b/i;
+
 export function buttonIntent(knowledge: Knowledge, ctx: ButtonContext): Intent {
   const { intent } = ctx;
+  // "Are you an AI?", "Who are you?": about him, whatever the router said.
+  if (IDENTITY.test(ctx.question)) return "about";
   if (intent === "smalltalk") return mentionsEmail(ctx.answer) ? "about" : intent;
   const fixed: Intent[] = ["contact", "private", "resume", "availability", "how_i_work", "writing", "photography"];
   if (!fixed.includes(intent) && namedProjects(knowledge, "", ctx.answer).length >= 2 && namedProjects(knowledge, ctx.question, "").length === 0) {

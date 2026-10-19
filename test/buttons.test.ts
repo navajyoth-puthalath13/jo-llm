@@ -72,6 +72,13 @@ describe("button rules (first = primary, second = secondary)", () => {
     expect(rules({ intent: "smalltalk", answer: "Hey! How can I help you today?" }, ["system", "email"])).toEqual([]);
   });
 
+  it("identity questions → Email me, then More about me, even when routed as small talk", () => {
+    for (const question of ["Are you an AI?", "are you real", "Who are you?", "Who am I talking to?"]) {
+      expect(rules({ intent: "smalltalk", question, answer: "I'm an AI version of Navajyoth." }), question).toEqual(["email", "about"]);
+    }
+    expect(rules({ intent: "smalltalk", question: "hi", answer: "Hey! How can I help you today?" })).toEqual([]);
+  });
+
   it("small talk that invites email (are you an AI?) → Email me, then More about me", () => {
     expect(rules({ intent: "smalltalk", answer: "You're talking to an AI version of me; the real me is reachable over email." })).toEqual([
       "email",
