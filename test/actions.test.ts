@@ -46,8 +46,8 @@ describe("action catalog", () => {
     }
   });
 
-  it("keeps only known ids, de-duplicated, at most 4", () => {
-    expect(sanitizeActionIds(["Email", "email", "resume", "nope", "x", "github", "linkedin"])).toEqual(["email", "resume", "x", "github"]);
+  it("keeps only known ids, de-duplicated, at most 3", () => {
+    expect(sanitizeActionIds(["Email", "email", "resume", "nope", "x", "github", "linkedin"])).toEqual(["email", "resume", "x"]);
     expect(resolveActions(["resume", "nope"])).toEqual([
       { id: "resume", label: "Open my resume", href: ACTIONS.find((a) => a.id === "resume")!.href, kind: "external" },
     ]);
@@ -68,8 +68,8 @@ describe("bracket guard", () => {
     const ctx = setup({ providers: [mockProvider(["I write about design. ", "[", "[ACT:res", "ume,github]]"])] });
     const events = await readEvents(await ask(ctx, { question: "hey" }));
     expect(answerText(events)).toBe("I write about design.");
-    // A greeting gets "More about me" from the rules, whatever the tag said.
-    expect(actionsOf(events)).toEqual(["about"]);
+    // A greeting gets no buttons from the rules, whatever the tag said.
+    expect(actionsOf(events)).toEqual([]);
   });
 });
 
@@ -86,11 +86,11 @@ describe("actions over the API", () => {
 
   it("uses the button model's picks, filtered through the rules", async () => {
     const utility = mockUtility(
-      { offtopic: false, intent: "project", files: ["care-scribe"] },
+      { offtopic: false, intent: "experience", files: ["experience"] },
       { actions: ["care-scribe", "work", "launch-missiles"] },
     );
     const ctx = setup({ providers: [mockProvider(["It was a proposed direction."])], utility: [utility] });
-    const events = await readEvents(await ask(ctx, { question: "Tell me about CARE Scribe" }));
+    const events = await readEvents(await ask(ctx, { question: "What did you do at OHC?" }));
     expect(actionsOf(events)).toEqual(["care-scribe", "work"]);
     // The button model saw ids and when-lines, never an href.
     const buttonCall = utility.calls.find((c) => c.name === "buttons")!;

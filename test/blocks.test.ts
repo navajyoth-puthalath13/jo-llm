@@ -75,14 +75,33 @@ describe("blocks format: allowed structure", () => {
     expect(flat("Hackathon\u00a02025, runner\u2011up")).toBe("Hackathon 2025, runner-up");
   });
 
-  it("still filters links and em dashes", () => {
-    expect(blocks("Find me:\n- https://evil.example.com\n- navajyoth.com — anytime")).toBe("Find me:\n- navajyoth.com, anytime");
+  it("still turns em dashes into commas", () => {
+    expect(blocks("Find me:\n- Email — anytime\n- X")).toBe("Find me:\n- Email, anytime\n- X");
+  });
+
+  it("never shows a link or an email address, and removes the words that pointed at it", () => {
+    expect(blocks("It hasn't shipped. Read more: https://navajyoth.com/work/care-scribe")).toBe("It hasn't shipped.");
+    expect(blocks("Feel free to email me at hello@navajyoth.com.")).toBe("Feel free to email me.");
+    expect(blocks("You can see more in the work section of my portfolio: https://navajyoth.com")).toBe(
+      "You can see more in the work section of my portfolio.",
+    );
+    expect(blocks("I write on Substack (navajyothputalath13.substack.com) about design.")).toBe("I write on Substack about design.");
+    expect(blocks("Here's the link: https://navajyoth.com. Enjoy!")).toBe("Enjoy!");
+    expect(blocks("Reach me:\n- Email: hello@navajyoth.com\n- LinkedIn: https://www.linkedin.com/in/x\n- X")).toBe(
+      "Reach me:\n- Email.\n- LinkedIn.\n- X",
+    );
+    // An item that was only a link disappears.
+    expect(blocks("Links:\n- https://evil.example.com\n- System\n- CARE Scribe")).toBe("Links:\n- System\n- CARE Scribe");
+  });
+
+  it("keeps ordinary words that look like lead-ins", () => {
+    expect(blocks("Look at the work section, see what fits.")).toBe("Look at the work section, see what fits.");
   });
 });
 
 describe("blocks format: streaming", () => {
-  const text = "Reach me here:\n- Email at hello@navajyoth.com\n- LinkedIn\n- X\n\nI reply fast.";
-  const expected = "Reach me here:\n- Email at hello@navajyoth.com\n- LinkedIn\n- X\n\nI reply fast.";
+  const text = "Reach me here:\n- Email at hello@navajyoth.com\n- LinkedIn\n- X\n\nI reply fast. Read more: https://navajyoth.com/about";
+  const expected = "Reach me here:\n- Email.\n- LinkedIn\n- X\n\nI reply fast.";
 
   it("gives the same result whatever the chunk size", () => {
     for (const size of [1, 2, 3, 5, 7, 13, 100]) expect(streamed(text, size).out, `chunks of ${size}`).toBe(expected);
@@ -109,6 +128,10 @@ describe("blocks format: streaming", () => {
 });
 
 describe("flat format is unchanged", () => {
+  it("keeps allowed links and emails, as before", () => {
+    expect(flat("Email hello@navajyoth.com or see https://navajyoth.com/about")).toBe("Email hello@navajyoth.com or see https://navajyoth.com/about");
+  });
+
   it("collapses everything to one line, as before", () => {
     expect(flat("# Hi\n- one\n- two\n> quote")).toBe("Hi one two quote");
     expect(flat("One.\n\nTwo.")).toBe("One. Two.");
@@ -134,7 +157,7 @@ describe("blocks format: request, prompt and cache", () => {
     expect(blockPrompt).toContain('starting with "- "');
     for (const p of [flatPrompt, blockPrompt]) {
       expect(p).toContain("small talk up to 12 words");
-      expect(p).toContain("Don't write out web addresses");
+      expect(p).toContain("Never write URLs, web addresses or the email address");
     }
     expect(blockPrompt).toContain("Two items is enough for a list");
   });

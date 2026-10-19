@@ -32,6 +32,10 @@ function judgeShape(c: EvalCase, text: string, problems: string[]): boolean {
     ok = false;
     problems.push(`${words} words, max ${max}`);
   }
+  if (/https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|app|io|dev)\b|@[a-z0-9-]+\./i.test(text)) {
+    ok = false;
+    problems.push("shows a URL or an email address");
+  }
   const bullets = text.split("\n").filter((l) => l.startsWith("- "));
   const numbered = text.split("\n").filter((l) => /^\d+\. /.test(l));
   const isBlocks = c.input.format === "blocks";
@@ -54,7 +58,7 @@ function judgeShape(c: EvalCase, text: string, problems: string[]): boolean {
     problems.push(`${items.length} items, expected ${c.items[0]}–${c.items[1]}`);
   }
   for (const item of items) {
-    if (wordCount(item.replace(/^(?:- |\d+\. )/, "")) > 12) {
+    if (wordCount(item.replace(/^(?:- |\d+\. )/, "")) > (c.itemWords ?? 12)) {
       ok = false;
       problems.push(`item too long: ${JSON.stringify(item)}`);
     }

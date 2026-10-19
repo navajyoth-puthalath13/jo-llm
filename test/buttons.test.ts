@@ -16,75 +16,131 @@ const ctx = (over: Partial<ButtonContext>): ButtonContext => ({
 });
 const rules = (over: Partial<ButtonContext>, candidates: string[] = []) => applyButtonRules(knowledge, ctx(over), candidates);
 
-describe("button rules", () => {
-  it("contact → email, linkedin, x in that order, never GitHub", () => {
-    expect(rules({ intent: "contact" }, ["github", "resume"])).toEqual(["email", "linkedin", "x"]);
+describe("button rules (first = primary, second = secondary)", () => {
+  // Every row of the intent table.
+  it("one specific project → that project, then See my full work", () => {
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", answer: "A direction I proposed." }, ["system"])).toEqual([
+      "care-scribe",
+      "all-work",
+    ]);
+    expect(rules({ intent: "project", question: "What is Guideline Agent?" }, ["work"])).toEqual(["a11y-agent", "all-work"]);
+    // Not named, but routed to a project file.
+    expect(rules({ intent: "project", files: ["system"], question: "what's the registry?" })).toEqual(["system", "all-work"]);
   });
 
-  it("contact → plus Substack when the answer mentions it", () => {
-    const answer = "Find me on LinkedIn and X, or read my writing on Substack.";
-    expect(rules({ intent: "contact", answer }, ["github"])).toEqual(["email", "linkedin", "x", "substack"]);
+  it("work overview → See my work, then System", () => {
+    const answer = "My main projects are System, CARE Scribe and Guideline Agent.";
+    expect(rules({ intent: "work_overview", question: "What have you worked on?", answer }, ["care-scribe", "a11y-agent"])).toEqual([
+      "work",
+      "system",
+    ]);
   });
 
-  it("availability → email first, then resume; never a project", () => {
-    expect(rules({ intent: "availability", answer: "Yes, I'm open to work." }, ["system", "work"])).toEqual(["email", "resume"]);
+  it("who are you / are you an AI → Email me, then More about me", () => {
+    expect(rules({ intent: "about", question: "Are you an AI?", answer: "I'm an AI version of him." }, ["github"])).toEqual(["email", "about"]);
   });
 
-  it("resume → only Open my resume, never an email button", () => {
-    expect(rules({ intent: "resume", answer: "Email me if you have questions." }, ["email", "linkedin"])).toEqual(["resume"]);
+  it("contact → email, LinkedIn, X (the only case with 3)", () => {
+    expect(rules({ intent: "contact", answer: "Email me, or find me on LinkedIn, X or Substack." }, ["github", "substack"])).toEqual([
+      "email",
+      "linkedin",
+      "x",
+    ]);
   });
 
-  it("a named project → that project's button first", () => {
-    expect(rules({ intent: "project", question: "Tell me about Guideline Agent" }, ["work"])[0]).toBe("a11y-agent");
-    expect(rules({ intent: "project", question: "and System?", answer: "…" }, ["care-scribe"])).toEqual(["system", "care-scribe"]);
-    // Named in the answer only: still before the model's other picks.
-    expect(rules({ intent: "project", question: "best project?", answer: "Start with System." }, ["work"])).toEqual(["system", "work"]);
+  it("resume → resume, then email", () => {
+    expect(rules({ intent: "resume" }, ["linkedin"])).toEqual(["resume", "email"]);
   });
 
-  it("how I work / why hire → See my work first; 'pull requests' in the answer isn't Guideline Agent", () => {
+  it("private → email only", () => {
+    expect(rules({ intent: "private", answer: "I keep that private." }, ["resume"])).toEqual(["email"]);
+  });
+
+  it("how I work → See my work, then More about me", () => {
     const answer = "I bring engineers in early and review pull requests while keeping the workflow central.";
-    expect(rules({ intent: "how_i_work", question: "How do you work with engineers?", answer }, ["a11y-agent", "email"])[0]).toBe("work");
-    expect(rules({ intent: "how_i_work", question: "How do you work with engineers?", answer }, [])).toEqual(["work"]);
+    expect(rules({ intent: "how_i_work", question: "Walk me through your process", answer }, ["a11y-agent"])).toEqual(["work", "about"]);
+    // "pull requests" in an answer doesn't name Guideline Agent; asking about pull requests does.
     expect(namedProjects(knowledge, "Why should we hire a senior designer?", answer)).toEqual([]);
-    // Asking about pull requests still points at it.
     expect(namedProjects(knowledge, "Do you have anything for pull request reviews?", "")).toEqual(["guideline-agent"]);
   });
 
-  it("work_overview → work first, even when the answer names every project", () => {
-    expect(rules({ intent: "work_overview", question: "show me your stuff", answer: "Here's my work." })).toEqual(["work"]);
-    const answer = "My main projects are System, CARE Scribe and Guideline Agent.";
-    expect(rules({ intent: "work_overview", question: "Show me all your work", answer }, [])).toEqual(["work", "system", "care-scribe"]);
+  it("availability → email, then resume", () => {
+    expect(rules({ intent: "availability", answer: "Yes, I'm open to work." }, ["system", "work"])).toEqual(["email", "resume"]);
   });
 
-  it("private → email only, and only if the answer points to email", () => {
-    expect(rules({ intent: "private", answer: "I'd rather talk about that over email: navajyothputalath13@gmail.com." }, ["resume"])).toEqual([
+  it("greeting → no buttons", () => {
+    expect(rules({ intent: "smalltalk", answer: "Hey! How can I help you today?" }, ["system", "email"])).toEqual([]);
+  });
+
+  it("small talk that invites email (are you an AI?) → Email me, then More about me", () => {
+    expect(rules({ intent: "smalltalk", answer: "You're talking to an AI version of me; the real me is reachable over email." })).toEqual([
       "email",
-    ]);
-    expect(rules({ intent: "private", answer: "I keep that private." }, ["email", "resume"])).toEqual([]);
-  });
-
-  it("smalltalk → just More about me", () => {
-    expect(rules({ intent: "smalltalk" }, ["system", "email"])).toEqual(["about"]);
-  });
-
-  it("never offers the page the visitor is already on", () => {
-    expect(rules({ intent: "project", question: "CARE Scribe?", page: "/work/care-scribe" }, ["care-scribe", "work"])).toEqual(["work"]);
-    expect(rules({ intent: "project", question: "CARE Scribe?", page: "/work/care-scribe/" }, ["care-scribe"])).toEqual([]);
-    // "/#work" is a section of the homepage, not the homepage itself.
-    expect(rules({ intent: "work_overview", page: "/" }, ["work"])).toEqual(["work"]);
-  });
-
-  it("at most 3, no duplicates, unknown ids dropped", () => {
-    expect(rules({ intent: "about" }, ["github", "GitHub", "nope", "https://evil.example.com", "about", "work", "x"])).toEqual([
-      "github",
       "about",
-      "work",
     ]);
   });
 
-  it("writing → substack, photography → photography", () => {
+  it("an answer naming two or more projects is an overview → See my work, then System", () => {
+    const answer = "I've worked on:\n- System: my design system\n- CARE Scribe: healthcare work\n- Guideline Agent: PR reviewer";
+    for (const intent of ["project", "experience"] as const) {
+      expect(rules({ intent, question: "what projects have you worked on?", answer }, ["system", "care-scribe"])).toEqual(["work", "system"]);
+    }
+    // Named in the question: still that project.
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", answer: "Unlike System, CARE Scribe…" })).toEqual([
+      "care-scribe",
+      "all-work",
+    ]);
+  });
+
+  it("writing → Substack first, photography → photos first (then the model's pick)", () => {
     expect(rules({ intent: "writing" })).toEqual(["substack"]);
     expect(rules({ intent: "photography" }, ["experiments"])).toEqual(["photography", "experiments"]);
+  });
+
+  // The email rule.
+  it("an answer that mentions emailing always gets Email me, first", () => {
+    expect(rules({ intent: "experience", answer: "I'd love to talk about that, you can email me." }, ["care-scribe"])).toEqual([
+      "email",
+      "care-scribe",
+    ]);
+    // Nothing else fits: More about me follows it.
+    expect(rules({ intent: "experience", answer: "Let's talk over coffee, just email me." })).toEqual(["email", "about"]);
+    // how I work answers that invite email: email leads.
+    expect(rules({ intent: "how_i_work", answer: "Email me and we'll talk it through." })).toEqual(["email", "work"]);
+  });
+
+  it("…but a specific project or the resume keeps first place, with email second", () => {
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", answer: "Email me for more." })).toEqual([
+      "care-scribe",
+      "email",
+    ]);
+    expect(rules({ intent: "resume", answer: "You can see it, or email me." })).toEqual(["resume", "email"]);
+  });
+
+  // The current-page rule.
+  it("never offers the page the visitor is on; the secondary moves up", () => {
+    expect(rules({ intent: "about", page: "/about" })).toEqual(["email"]);
+    expect(rules({ intent: "how_i_work", page: "/about/" })).toEqual(["work"]);
+    // "/#work" is a section of the homepage, not the homepage itself.
+    expect(rules({ intent: "work_overview", page: "/" })).toEqual(["work", "system"]);
+  });
+
+  it("a project button removed on its own page isn't replaced: all-work never leads", () => {
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", page: "/work/care-scribe" })).toEqual([]);
+  });
+
+  // Exclusivity and caps.
+  it("never See my work and See my full work together; all-work only after a project", () => {
+    expect(rules({ intent: "experience" }, ["work", "all-work"])).toEqual(["work"]);
+    expect(rules({ intent: "experience" }, ["all-work", "about"])).toEqual(["about"]);
+    expect(rules({ intent: "experience" }, ["care-scribe", "all-work"])).toEqual(["care-scribe", "all-work"]);
+  });
+
+  it("at most 2 (contact 3), no duplicates, unknown ids dropped", () => {
+    expect(rules({ intent: "experience" }, ["github", "GitHub", "nope", "https://evil.example.com", "about", "work", "x"])).toEqual([
+      "github",
+      "about",
+    ]);
+    expect(rules({ intent: "contact" })).toHaveLength(3);
   });
 
   it("finds projects by name, not by generic words", () => {
@@ -106,7 +162,7 @@ describe("button picker", () => {
     const r = await pickButtons({
       providers: [p],
       knowledge,
-      ctx: ctx({ intent: "about", question: "Side projects?", answer: "A few small tools." }),
+      ctx: ctx({ intent: "experience", question: "Side projects?", answer: "A few small tools." }),
       budgetMs: 1000,
       signal: signal(),
     });
@@ -124,7 +180,7 @@ describe("button picker", () => {
       const r = await pickButtons({
         providers: [p],
         knowledge,
-        ctx: ctx({ intent: "project", files: ["care-scribe"], question: "Tell me about CARE Scribe", answer: "…" }),
+        ctx: ctx({ intent: "experience", files: ["care-scribe"], question: "What did you do at OHC?", answer: "…" }),
         budgetMs: 100,
         signal: signal(),
       });
@@ -134,9 +190,10 @@ describe("button picker", () => {
 
   it("doesn't spend a call when the rules decide on their own", async () => {
     const p = mockJsonProvider(JSON.stringify({ actions: ["system"] }));
-    for (const intent of ["smalltalk", "private", "contact", "resume"] as const) {
+    for (const intent of ["smalltalk", "private", "contact", "resume", "work_overview", "about", "how_i_work", "availability"] as const) {
       await pickButtons({ providers: [p], knowledge, ctx: ctx({ intent }), budgetMs: 1000, signal: signal() });
     }
+    await pickButtons({ providers: [p], knowledge, ctx: ctx({ intent: "project", question: "What is System?" }), budgetMs: 1000, signal: signal() });
     expect(p.calls).toHaveLength(0);
   });
 });
