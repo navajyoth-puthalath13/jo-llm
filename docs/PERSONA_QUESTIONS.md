@@ -30,7 +30,7 @@ They want to know quickly: can this person do the job, what's the proof, and wha
 | 5 | **trap** Did CARE Scribe ship? How many hospitals use it? | No. A direction you proposed and discussed, not shipped or adopted. **No hospital count.** | Read CARE Scribe |
 | 6 | Can you own a feature end to end? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
 | 7 | How do you work with engineers? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
-| 8 | **interview** Why should we hire you over a senior designer? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 8 | Why should we hire you over a senior designer? | Asks back what role it's for (no buttons, the reply box stays open). After the role: honest that you're after junior product/UX roles, 2–3 relevant points, never compares with other candidates, invites email or a cup of coffee. | none, then Email me · See my work |
 | 9 | What's your biggest weakness? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
 | 10 | Tell me about a mistake you made. | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
 

@@ -373,4 +373,36 @@ export const EVAL_CASES: EvalCase[] = [
     shape: "prose",
     buttons: ["substack"],
   },
+  // "Why hire you?" asks for the role first, then answers for that role.
+  {
+    name: "why hire: asks the role",
+    input: { question: "Why should I hire you?", format: "blocks" },
+    contains: [["role", "position"]],
+    never: ["senior", "other candidates", /\bbetter than\b/i],
+    maxWords: 20,
+    shape: "prose",
+    buttons: [],
+    exactButtons: true,
+  },
+  {
+    name: "why hire: answers for the role",
+    input: {
+      question: "A junior UX designer for a healthcare startup",
+      format: "blocks",
+      history: [{ q: "Why should I hire you?", a: "Happy to tell you! What kind of role are you hiring for?" }],
+    },
+    contains: [["Open Healthcare Network", "OHC", "hospital", "clinician", "healthcare"], ["email", "coffee"]],
+    never: ["senior designer", "other candidates", "years of experience"],
+    buttons: ["email"],
+  },
+  {
+    name: "why hire: senior role, honest",
+    input: {
+      question: "Senior product designer",
+      format: "blocks",
+      history: [{ q: "Why should we hire you?", a: "Happy to tell you! What kind of role are you hiring for?" }],
+    },
+    contains: [["junior"]],
+    buttons: ["email"],
+  },
 ];

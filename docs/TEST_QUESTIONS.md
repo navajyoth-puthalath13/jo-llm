@@ -69,7 +69,7 @@ What every answer should feel like:
 | 29 | How do you design for AI products? | Start with the user's task; where AI genuinely helps, uncertainty, errors. | none |
 | 30 | What tools do you use? | Figma, Adobe CC, GitHub, Claude, Codex, Paper (the design app). A list is OK here. Must **not** mention "pen and paper", Cohere, Rave or Notebook tools (those are TODOs). | none |
 | 31 | What's your biggest weakness? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
-| 32 | Why should we hire you? | Doesn't answer: says you'd love to answer that yourself, over email or a cup of coffee, and gives your email. | Email me |
+| 32 | Why should we hire you? | Asks one short question back: what kind of role? Then reply with a role (e.g. "junior UX designer at a fintech startup"): 2–3 reasons from your real work that fit it, then email or a cup of coffee. | none, then Email me · See my work |
 
 ## 5. Work and opportunities
 

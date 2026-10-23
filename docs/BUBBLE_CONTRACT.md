@@ -45,3 +45,4 @@ These follow from the grammar above; they don't add to it.
 - "About 10 words or fewer" per item is asked of the model and checked by `npm run eval`; the sanitizer doesn't cut items short, since that would change their meaning.
 - Block answers never contain a URL or an email address; the buttons carry them. The sanitizer removes any that slip through, with their lead-ins ("Read more:", "email me at").
 - `actions` order is meaning: the first is the primary next step, the rest secondary. Usually 2; contact gets 3 (email, LinkedIn, X); small talk gets none. `all-work` ("See my full work", `/#work`) only ever comes second, after a specific project.
+- `done` may carry `awaitingReply: true` when Jo's answer ends by asking the visitor something (for example "What kind of role are you hiring for?"). Keep the reply box open and focused; older clients can ignore it.

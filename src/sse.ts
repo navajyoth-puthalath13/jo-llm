@@ -7,7 +7,7 @@ export type ErrorCode = "offline" | "rate_limited" | "busy" | "invalid" | "offto
 export type JoEvent =
   | { event: "token"; data: { t: string } }
   | { event: "actions"; data: { actions: ResolvedAction[] } }
-  | { event: "done"; data: { cached: boolean } }
+  | { event: "done"; data: { cached: boolean; awaitingReply?: true } }
   | { event: "error"; data: { code: ErrorCode } };
 
 const encoder = new TextEncoder();
@@ -34,7 +34,8 @@ export interface EventWriter {
   token(t: string): Promise<void>;
   /** Sent after the last token and before done, only with at least one action. Never with an error. */
   actions(actions: ResolvedAction[]): Promise<void>;
-  done(cached: boolean): Promise<void>;
+  /** `awaitingReply`: Jo's answer ends with a question to the visitor, so keep the reply box open. */
+  done(cached: boolean, awaitingReply?: boolean): Promise<void>;
   error(code: ErrorCode): Promise<void>;
   close(): Promise<void>;
 }
@@ -53,7 +54,7 @@ export function createEventStream(): { readable: ReadableStream<Uint8Array>; wri
     writer: {
       token: (t) => send({ event: "token", data: { t } }),
       actions: (actions) => send({ event: "actions", data: { actions } }),
-      done: (cached) => send({ event: "done", data: { cached } }),
+      done: (cached, awaitingReply) => send({ event: "done", data: awaitingReply ? { cached, awaitingReply: true } : { cached } }),
       error: (code) => send({ event: "error", data: { code } }),
       close: async () => {
         if (closed) return;

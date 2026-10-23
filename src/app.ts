@@ -7,6 +7,7 @@ import { isEnabled } from "./guard/killswitch";
 import { applyMode, MODE_KEY, readMode } from "./guard/mode";
 import { hashIp, type Limiter } from "./guard/ratelimit";
 import { linksFromKnowledge } from "./guard/output";
+import { endsWithQuestion } from "./buttons";
 import { parseAsk, readCappedBody } from "./guard/validate";
 import { answerCacheScope, runJo } from "./jo";
 import {
@@ -182,7 +183,7 @@ export function createApp(deps: AppDeps) {
               for (const t of chunkAnswer(hit.text)) await writer.token(t);
               const actions = resolveActions(hit.actions);
               if (actions.length) await writer.actions(actions);
-              await writer.done(true);
+              await writer.done(true, endsWithQuestion(hit.text));
             } catch {
               // client went away
             } finally {
@@ -243,7 +244,7 @@ export function createApp(deps: AppDeps) {
           const ids = result?.actions ?? [];
           const actions = resolveActions(ids);
           if (actions.length) await writer.actions(actions);
-          await writer.done(false);
+          await writer.done(false, endsWithQuestion(outcome.text));
           if (key) await putCached(c.env.JO_KV, key, { text: outcome.text, actions: ids }, config.cacheTtlSeconds);
         } else {
           await writer.error(outcome.code);
