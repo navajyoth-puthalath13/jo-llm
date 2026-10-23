@@ -392,7 +392,8 @@ export const EVAL_CASES: EvalCase[] = [
       history: [{ q: "Why should I hire you?", a: "Happy to tell you! What kind of role are you hiring for?" }],
     },
     contains: [["Open Healthcare Network", "OHC", "hospital", "clinician", "healthcare"], ["email", "coffee"]],
-    never: ["senior designer", "other candidates", "years of experience"],
+    never: ["senior designer", "other candidates", "years of experience", "great fit", /\bdelivered\b/i, /\bled\b/i],
+    maxWords: 40,
     buttons: ["email"],
   },
   {
