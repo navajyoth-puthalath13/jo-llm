@@ -15,7 +15,7 @@ import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
 /** Bump when the rules below change, so cached answers pick up the new buttons. */
-export const BUTTON_RULES_VERSION = 5;
+export const BUTTON_RULES_VERSION = 6;
 
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -72,6 +72,9 @@ export interface ButtonContext {
   answer: string;
   page?: string;
 }
+
+/** Jo's answer ends by asking the visitor something. */
+export const endsWithQuestion = (text: string) => /\?["'”’)]*\s*$/.test(text);
 
 const mentionsEmail = (text: string) => /@|\bemail\b|\be-mail\b/i.test(text);
 
@@ -133,6 +136,7 @@ const DECIDED: Partial<Record<Intent, string[]>> = {
  * | private                        | email                                     |
  * | how I work / process           | work, then about                          |
  * | availability                   | email, then resume                        |
+ * | why hire me                    | none while asking the role; then email, work |
  * | small talk                     | none (if it invites email: as "about")    |
  * | anything else                  | the model's picks (writing → substack, photography → photography first) |
  *
@@ -153,7 +157,7 @@ export function buttonIntent(knowledge: Knowledge, ctx: ButtonContext): Intent {
   // "Are you an AI?", "Who are you?": about him, whatever the router said.
   if (IDENTITY.test(ctx.question)) return "about";
   if (intent === "smalltalk") return mentionsEmail(ctx.answer) ? "about" : intent;
-  const fixed: Intent[] = ["contact", "private", "resume", "availability", "how_i_work", "writing", "photography"];
+  const fixed: Intent[] = ["contact", "private", "resume", "availability", "hire_me", "how_i_work", "writing", "photography"];
   if (!fixed.includes(intent) && namedProjects(knowledge, "", ctx.answer).length >= 2 && namedProjects(knowledge, ctx.question, "").length === 0) {
     return "work_overview";
   }
@@ -164,6 +168,9 @@ export function applyButtonRules(knowledge: Knowledge, raw: ButtonContext, candi
   const ctx = { ...raw, intent: buttonIntent(knowledge, raw) };
   const { intent } = ctx;
   if (intent === "smalltalk") return [];
+  // "Why hire you?": while Jo is asking what role, no buttons (the reply box is the next step);
+  // once it has answered for a role, email first.
+  if (intent === "hire_me") return finish(ctx, endsWithQuestion(ctx.answer) ? [] : ["email", "work"], USUAL_MAX);
   if (intent === "contact") return finish(ctx, [...CONTACT], CONTACT_MAX);
   if (intent === "private") return finish(ctx, ["email"], USUAL_MAX);
 
@@ -231,7 +238,7 @@ export async function pickButtons(o: PickOptions): Promise<PickedButtons> {
   const { ctx } = o;
   // Most intents are fully decided by the rules; don't spend a call on them.
   const intent = buttonIntent(o.knowledge, ctx);
-  if (DECIDED[intent] || intent === "private" || (intent === "project" && projectButton(o.knowledge, ctx))) {
+  if (DECIDED[intent] || intent === "private" || intent === "hire_me" || (intent === "project" && projectButton(o.knowledge, ctx))) {
     return { ids: applyButtonRules(o.knowledge, ctx, []), source: "rules" };
   }
   const result = await structuredCall(

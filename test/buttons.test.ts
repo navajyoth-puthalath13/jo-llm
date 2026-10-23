@@ -68,6 +68,14 @@ describe("button rules (first = primary, second = secondary)", () => {
     expect(rules({ intent: "availability", answer: "Yes, I'm open to work." }, ["system", "work"])).toEqual(["email", "resume"]);
   });
 
+  it("why hire me → no buttons while asking the role, then Email me, See my work", () => {
+    expect(rules({ intent: "hire_me", answer: "Happy to tell you! What kind of role are you hiring for?" })).toEqual([]);
+    expect(rules({ intent: "hire_me", answer: "For a junior UX role: I've designed hospital workflows at OHC. Let's talk over coffee." })).toEqual([
+      "email",
+      "work",
+    ]);
+  });
+
   it("greeting → no buttons", () => {
     expect(rules({ intent: "smalltalk", answer: "Hey! How can I help you today?" }, ["system", "email"])).toEqual([]);
   });

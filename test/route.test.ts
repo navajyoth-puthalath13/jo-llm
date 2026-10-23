@@ -88,7 +88,7 @@ describe("router (keyword fallback)", () => {
     ["What's your salary expectation?", "private", []],
     // Interview questions meant for the real person.
     ["What's your biggest weakness?", "private", []],
-    ["Why should we hire you?", "private", []],
+    ["Why should we hire you?", "hire_me", ["hire-me"]],
     ["Tell me about a mistake you made", "private", []],
     ["How do you work with engineers?", "private", []],
     ["How would you own a feature end to end?", "private", []],
@@ -108,6 +108,15 @@ describe("router (keyword fallback)", () => {
       expect(r.offtopic).toBe(false);
     });
   }
+
+  it("a reply to Jo's 'what role?' is about hiring, whatever words it uses", () => {
+    const history = [{ q: "Why should I hire you?", a: "Happy to tell you! What kind of role are you hiring for?" }];
+    const r = keywordRoute(knowledge, { question: "A junior UX designer for a fintech app", history });
+    expect(r.intent).toBe("hire_me");
+    expect(r.files[0]).toBe("hire-me");
+    // Without that question, the same words aren't treated as a hiring reply.
+    expect(keywordRoute(knowledge, { question: "A junior UX designer for a fintech app" }).intent).not.toBe("hire_me");
+  });
 
   it("uses the selected text and the last question too", () => {
     expect(keywordRoute(knowledge, { question: "explain this", quote: "the CARE Scribe mobile capture flow" }).files[0]).toBe("care-scribe");

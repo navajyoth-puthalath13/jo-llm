@@ -48,7 +48,7 @@ The response is `text/event-stream` and uses only these events:
 | ------- | -------------------------------------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                                              |
 | `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–4 buttons; optional) |
-| `done`  | `{ "cached": boolean }`                                              |
+| `done`  | `{ "cached": boolean, "awaitingReply"?: true }` (`awaitingReply` when Jo's answer ends by asking the visitor something: keep the reply box open and focused) |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` |
 
 **Client notes**
@@ -97,6 +97,7 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
    | private | `email` |
    | how I work / process | `work`, then `about` |
    | availability | `email`, then `resume` |
+   | why hire me | none while Jo asks what role; then `email`, `work` |
    | small talk | none |
    | anything else (experience, writing, photography…) | a structured call's picks (ids and `when` lines, never hrefs; budget 1 s; the routed files' `actions` if it fails), with `substack` / `photography` first for writing / photography |
 

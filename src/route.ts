@@ -15,6 +15,7 @@ export const INTENTS = [
   "about",
   "experience",
   "availability",
+  "hire_me",
   "how_i_work",
   "contact",
   "resume",
@@ -45,7 +46,8 @@ const INTENT_HELP: Record<Intent, string> = {
   work_overview: "his work or projects in general, or which one to look at first",
   about: "who he is, his name, where he's based, whether this is an AI",
   experience: "his jobs, Open Healthcare Network, years of experience, impact",
-  availability: "hiring him, roles he wants, start date, relocation, what team he wants",
+  availability: "roles he wants, start date, relocation, what team he wants",
+  hire_me: "why someone should hire him or whether he fits their role, including a reply naming the role after Jo asked what role they're hiring for",
   how_i_work: "his design process as shown on the site, design approach, code, AI products, tools, accessibility approach",
   contact: "how to reach, follow or connect with him (email, LinkedIn, X, GitHub)",
   resume: "his resume or CV",
@@ -138,9 +140,13 @@ const normalize = (s: string) =>
 const has = (text: string, phrase: string) => text.includes(` ${phrase} `);
 
 const GREETING = /^\s*(hi|hii+|hey+|hello|yo|hola|namaste|good (morning|afternoon|evening)|thanks|thank you|thx|ok|okay|cool|nice)\b[\s!.?]*$/i;
+/** Jo's question back to "why should I hire you?". */
+export const ASKED_ROLE = /what (?:kind of |sort of |type of )?(?:role|position|job)/i;
+
 const INTENT_WORDS: [Intent, RegExp][] = [
   ["resume", /\b(resume|cv|curriculum)\b/],
-  ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left|weakness(es)?|strengths?|why should (we|i) hire|why hire|mistakes?|failures?|measur\w* impact|where do you see yourself|tell me about a time|work with (engineers?|developers?|pms?|product managers?|stakeholders?)|end[- ]to[- ]end|own (a|the) feature|how do you handle|disagree\w*|conflicts?)\b/],
+  ["hire_me", /\b(why should (we|i) hire|why hire|hire you|good fit|right fit|fit for (the|this|our) role)\b/],
+  ["private", /\b(salary|salaries|rates?|pay|ctc|compensation|age|how old|married|relationship|girlfriend|wife|religion|why did you leave|why you left|weakness(es)?|strengths?|mistakes?|failures?|measur\w* impact|where do you see yourself|tell me about a time|work with (engineers?|developers?|pms?|product managers?|stakeholders?)|end[- ]to[- ]end|own (a|the) feature|how do you handle|disagree\w*|conflicts?)\b/],
   ["contact", /\b(contact|reach|email|e-mail|linkedin|twitter|follow|connect|get in touch|socials?|dm|online|find you|where can i find)\b|\bon x\b/],
   ["writing", /\b(substack|blog|blogs|newsletter|articles?|do you write|writing)\b/],
   ["photography", /\b(photo|photos|photography|camera|pictures)\b/],
@@ -153,6 +159,7 @@ const INTENT_FOR_FILE: Record<string, Intent> = {
   overview: "work_overview",
   experience: "experience",
   availability: "availability",
+  "hire-me": "hire_me",
   "how-i-work": "how_i_work",
   accessibility: "how_i_work",
   tools: "how_i_work",
@@ -174,7 +181,7 @@ export function keywordRoute(knowledge: Knowledge, input: AskInput): Route {
     }))
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || a.order - b.order);
-  const files = scored.slice(0, MAX_ROUTED_FILES).map((s) => s.id);
+  let files = scored.slice(0, MAX_ROUTED_FILES).map((s) => s.id);
 
   let intent: Intent = "about";
   const q = question.toLowerCase();
@@ -183,6 +190,11 @@ export function keywordRoute(knowledge: Knowledge, input: AskInput): Route {
     const byWords = INTENT_WORDS.find(([, re]) => re.test(q));
     if (byWords) intent = byWords[0];
     else if (files[0] && INTENT_FOR_FILE[files[0]]) intent = INTENT_FOR_FILE[files[0]]!;
+  }
+  // Jo just asked what role they're hiring for: this message is the answer to that.
+  if (intent !== "smalltalk" && ASKED_ROLE.test(input.history?.at(-1)?.a ?? "")) {
+    intent = "hire_me";
+    files = ["hire-me", ...files.filter((f) => f !== "hire-me")].slice(0, MAX_ROUTED_FILES);
   }
   return { offtopic: false, intent, files: intent === "smalltalk" ? [] : files, source: "keywords" };
 }

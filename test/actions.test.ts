@@ -76,6 +76,19 @@ describe("bracket guard", () => {
 describe("actions over the API", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("flags done with awaitingReply when Jo ends by asking something", async () => {
+    const asking = setup({ providers: [mockProvider(["Happy to tell you! ", "What kind of role are you hiring for?"])] });
+    const events = await readEvents(await ask(asking, { question: "Why should I hire you?" }));
+    expect(events.at(-1)).toEqual({ event: "done", data: { cached: false, awaitingReply: true } });
+    expect(actionsOf(events)).toEqual([]);
+    // A cached copy carries the flag too.
+    const again = await readEvents(await ask(asking, { question: "Why should I hire you?" }));
+    expect(again.at(-1)).toEqual({ event: "done", data: { cached: true, awaitingReply: true } });
+    // A plain answer doesn't.
+    const plain = setup({ providers: [mockProvider(["I'm based in Kerala."])] });
+    expect((await readEvents(await ask(plain, { question: "Where are you based?" }))).at(-1)).toEqual({ event: "done", data: { cached: false } });
+  });
+
   it("sends actions after the last token and before done", async () => {
     const ctx = setup({ providers: [mockProvider(["You can grab ", "it here."])] });
     const events = await readEvents(await ask(ctx, { question: "Where's your resume?" }));
