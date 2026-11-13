@@ -11,7 +11,8 @@ import { renderKnowledge, type Knowledge } from "./knowledge";
 import { buildSystemPrompt, buildUserMessage, rulesFor } from "./prompt";
 import { firstTokenTimeouts } from "./providers/router";
 import type { Provider } from "./providers/types";
-import { filesForAnswer, routeQuestion, type Route } from "./route";
+import { isProjectDetailQuestion, projectInContext, resolveWhichProjectReply, whichProject } from "./project-context";
+import { filesForAnswer, MAX_ROUTED_FILES, routeQuestion, type Route } from "./route";
 
 /** Everything an answer depends on. Any change to a knowledge file, the rules or the catalog
  *  changes this, which invalidates cached answers (the button rules too: cached answers keep their buttons). */
@@ -42,11 +43,28 @@ export interface JoResult {
   buttonSource?: "model" | "fallback" | "rules";
 }
 
-export async function runJo(o: JoRunOptions): Promise<JoResult> {
+export async function runJo(opts: JoRunOptions): Promise<JoResult> {
+  // "Appointment scheduling", after Jo asked which project: the earlier question, about that project.
+  const o = { ...opts, input: resolveWhichProjectReply(opts.knowledge, opts.input) };
   const t = o.trace ?? (() => {});
+  if (o.input !== opts.input) t("7 route", `reply to "which project?": asking ${JSON.stringify(o.input.question)}`);
+
+  // 0. "What problem were you solving?" with no project in sight: ask which one, no model call.
+  const ask = whichProject(o.knowledge, o.input);
+  if (ask) {
+    t("7 route", "project-detail question with no project in context: asking which project");
+    await o.onText(ask);
+    return {
+      route: { offtopic: false, intent: "project", files: [], source: "keywords" },
+      files: [],
+      outcome: { ok: true, text: ask, provider: "jo" },
+      actions: [],
+      buttonSource: "rules",
+    };
+  }
 
   // 1. Route.
-  const route = await routeQuestion({
+  const routed = await routeQuestion({
     providers: o.utilityProviders,
     knowledge: o.knowledge,
     input: o.input,
@@ -57,6 +75,8 @@ export async function runJo(o: JoRunOptions): Promise<JoResult> {
       o.log?.(p, `route_${r}`);
     },
   });
+  // The project the visitor is reading or was just asking about answers "the problem", "the users"…
+  const route = withContextProject(o, routed);
   t(
     "7 route",
     `${route.source === "model" ? `✓ ${route.provider}` : "keyword fallback"}: intent ${route.intent}, files ${JSON.stringify(route.files)}${route.offtopic ? ", OFF-TOPIC" : ""}`,
@@ -105,4 +125,19 @@ export async function runJo(o: JoRunOptions): Promise<JoResult> {
   });
   t("11 buttons", `${picked.source}: ${picked.ids.length ? picked.ids.join(", ") : "none"}`);
   return { route, files, outcome, actions: picked.ids, buttonSource: picked.source };
+}
+
+/**
+ * A question about a project that doesn't name one ("who were the users?") is about the project in
+ * context: the page being read or the one just discussed. Its file goes first, and the other project
+ * files go, so CARE Scribe facts never answer an Appointment scheduling question.
+ */
+function withContextProject(o: JoRunOptions, route: Route): Route {
+  if (route.offtopic) return route;
+  if (route.intent !== "project" && !isProjectDetailQuestion(o.input.question)) return route;
+  const project = projectInContext(o.knowledge, o.input);
+  if (!project) return route;
+  const projectFiles = new Set(["system", "care-scribe", "guideline-agent", "appointment-scheduling"]);
+  const rest = route.files.filter((f) => !projectFiles.has(f) && f !== project);
+  return { ...route, intent: "project", files: [project, ...rest].slice(0, MAX_ROUTED_FILES) };
 }

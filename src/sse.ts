@@ -1,12 +1,14 @@
 // Server-sent events: writing our own stream to the browser, and reading provider streams.
 
 import type { ResolvedAction } from "./actions";
+import type { Reply } from "./replies";
 
 export type ErrorCode = "offline" | "rate_limited" | "busy" | "invalid" | "offtopic";
 
 export type JoEvent =
   | { event: "token"; data: { t: string } }
   | { event: "actions"; data: { actions: ResolvedAction[] } }
+  | { event: "replies"; data: { replies: Reply[] } }
   | { event: "done"; data: { cached: boolean; awaitingReply?: true } }
   | { event: "error"; data: { code: ErrorCode } };
 
@@ -34,6 +36,8 @@ export interface EventWriter {
   token(t: string): Promise<void>;
   /** Sent after the last token and before done, only with at least one action. Never with an error. */
   actions(actions: ResolvedAction[]): Promise<void>;
+  /** Reply buttons for a question Jo asked. After actions, before done. Old clients ignore the event. */
+  replies(replies: Reply[]): Promise<void>;
   /** `awaitingReply`: Jo's answer ends with a question to the visitor, so keep the reply box open. */
   done(cached: boolean, awaitingReply?: boolean): Promise<void>;
   error(code: ErrorCode): Promise<void>;
@@ -54,6 +58,7 @@ export function createEventStream(): { readable: ReadableStream<Uint8Array>; wri
     writer: {
       token: (t) => send({ event: "token", data: { t } }),
       actions: (actions) => send({ event: "actions", data: { actions } }),
+      replies: (replies) => send({ event: "replies", data: { replies } }),
       done: (cached, awaitingReply) => send({ event: "done", data: awaitingReply ? { cached, awaitingReply: true } : { cached } }),
       error: (code) => send({ event: "error", data: { code } }),
       close: async () => {

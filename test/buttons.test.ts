@@ -28,11 +28,11 @@ describe("button rules (first = primary, second = secondary)", () => {
     expect(rules({ intent: "project", files: ["system"], question: "what's the registry?" })).toEqual(["system", "all-work"]);
   });
 
-  it("work overview → See my work, then System", () => {
-    const answer = "My main projects are System, CARE Scribe and Guideline Agent.";
+  it("work overview → See my work, then the newest case study (not System)", () => {
+    const answer = "My main projects are Appointment scheduling, System, CARE Scribe and Guideline Agent.";
     expect(rules({ intent: "work_overview", question: "What have you worked on?", answer }, ["care-scribe", "a11y-agent"])).toEqual([
       "work",
-      "system",
+      "appointment-scheduling",
     ]);
   });
 
@@ -101,10 +101,10 @@ describe("button rules (first = primary, second = secondary)", () => {
     ]);
   });
 
-  it("an answer naming two or more projects is an overview → See my work, then System", () => {
+  it("an answer naming two or more projects is an overview → See my work, then the newest case study", () => {
     const answer = "I've worked on:\n- System: my design system\n- CARE Scribe: healthcare work\n- Guideline Agent: PR reviewer";
     for (const intent of ["project", "experience"] as const) {
-      expect(rules({ intent, question: "what projects have you worked on?", answer }, ["system", "care-scribe"])).toEqual(["work", "system"]);
+      expect(rules({ intent, question: "what projects have you worked on?", answer }, ["system", "care-scribe"])).toEqual(["work", "appointment-scheduling"]);
     }
     // Named in the question: still that project.
     expect(rules({ intent: "project", question: "Tell me about CARE Scribe", answer: "Unlike System, CARE Scribe…" })).toEqual([
@@ -120,7 +120,7 @@ describe("button rules (first = primary, second = secondary)", () => {
 
   // The email rule.
   it("an answer that mentions emailing always gets Email me, first", () => {
-    expect(rules({ intent: "experience", answer: "I'd love to talk about that, you can email me." }, ["care-scribe"])).toEqual([
+    expect(rules({ intent: "experience", files: ["experience"], answer: "I'd love to talk about that, you can email me." }, ["care-scribe"])).toEqual([
       "email",
       "care-scribe",
     ]);
@@ -143,18 +143,105 @@ describe("button rules (first = primary, second = secondary)", () => {
     expect(rules({ intent: "about", page: "/about" })).toEqual(["email"]);
     expect(rules({ intent: "how_i_work", page: "/about/" })).toEqual(["work"]);
     // "/#work" is a section of the homepage, not the homepage itself.
-    expect(rules({ intent: "work_overview", page: "/" })).toEqual(["work", "system"]);
+    expect(rules({ intent: "work_overview", page: "/" })).toEqual(["work", "appointment-scheduling"]);
+    expect(rules({ intent: "work_overview", page: "/work/appointment-scheduling" })).toEqual(["work"]);
   });
 
-  it("a project button removed on its own page isn't replaced: all-work never leads", () => {
-    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", page: "/work/care-scribe" })).toEqual([]);
+  it("on a project's own page, its button gives way to all-work", () => {
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", page: "/work/care-scribe" })).toEqual(["all-work"]);
+    expect(rules({ intent: "project", question: "Who were the users?", files: ["appointment-scheduling"], page: "/work/appointment-scheduling" })).toEqual(["all-work"]);
+    // all-work still never leads anywhere else.
+    expect(rules({ intent: "about", page: "/work/care-scribe" }, ["all-work"])).not.toContain("all-work");
+  });
+
+  it("CARE itself gets both CARE case studies, never System or one of them alone", () => {
+    for (const question of ["What is CARE?", "what is care", "Tell me about CARE"]) {
+      for (const intent of ["about", "experience", "work_overview", "project"] as const) {
+        expect(rules({ intent, question, answer: "CARE is a hospital information system by Open Healthcare Network." }), `${intent}: ${question}`).toEqual([
+          "appointment-scheduling",
+          "care-scribe",
+        ]);
+      }
+    }
+    // Naming a CARE project is that project, and "care about" isn't CARE.
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe" })).toEqual(["care-scribe", "all-work"]);
+    expect(rules({ intent: "how_i_work", question: "What do you care about in design?" })).toEqual(["work", "about"]);
+  });
+
+  it("the routed project beats a project name that's just a word in the answer", () => {
+    expect(
+      rules({
+        intent: "project",
+        question: "Who uses appointment templates?",
+        files: ["appointment-scheduling"],
+        answer: "Doctors and nurses set them up, and the system generates the slots.",
+        page: "/work/appointment-scheduling",
+      }),
+    ).toEqual(["all-work"]);
+  });
+
+  it("the word \"system\" in an answer is never the System project", () => {
+    for (const answer of [
+      "CARE is a hospital information system, and my Appointment scheduling case study reworked its template form.",
+      "Doctors and nurses set the template, and the system generates the slots for Appointment scheduling.",
+      "I built a design system once, but Appointment scheduling is about the template form.",
+      "It's part of CARE's Information System.",
+    ]) {
+      expect(namedProjects(knowledge, "", answer), answer).not.toContain("system");
+      for (const intent of ["project", "experience", "about", "work_overview"] as const) {
+        expect(rules({ intent, question: "Tell me about the scheduling work", answer }, ["system"]), `${intent}: ${answer}`).not.toContain("system");
+      }
+    }
+    // Written as a name, it still is.
+    expect(namedProjects(knowledge, "", "System is my design system.")).toEqual(["system"]);
+    expect(namedProjects(knowledge, "", "I also maintain System, and the CARE Scribe direction.")).toEqual(["system", "care-scribe"]);
+  });
+
+  it("Jo's answer beats a routed project it doesn't mention", () => {
+    const answer = "My newest project is the appointment-scheduling case study, reworking CARE's template form.";
+    expect(rules({ intent: "project", question: "What's your newest project?", files: ["system", "overview"], answer })).toEqual([
+      "appointment-scheduling",
+      "all-work",
+    ]);
+    // Routed and named: the routed one stays.
+    expect(rules({ intent: "project", question: "q", files: ["system"], answer: "System is the design system I maintain." })).toEqual([
+      "system",
+      "all-work",
+    ]);
+  });
+
+  it("a question whose keywords point at the routed project is about that project", () => {
+    expect(rules({ intent: "about", question: "What are you working on right now?", files: ["system"], answer: "I'm refining my live design system." })).toEqual([
+      "system",
+      "all-work",
+    ]);
+  });
+
+  it("\"What are you?\" is identity; \"What are you working on?\" isn't", () => {
+    expect(rules({ intent: "smalltalk", question: "What are you?" })).toEqual(["email", "about"]);
+    expect(rules({ intent: "about", question: "What are you working on?", files: ["system"] })).toEqual(["system", "all-work"]);
+  });
+
+  it("a CARE question about one project is that project", () => {
+    expect(rules({ intent: "project", question: "How does CARE generate appointment slots?", files: ["appointment-scheduling"] })).toEqual([
+      "appointment-scheduling",
+      "all-work",
+    ]);
+  });
+
+  it("appointment questions never get the CARE Scribe button", () => {
+    for (const question of ["Who uses appointment templates?", "What was wrong with the old appointment template form?"]) {
+      expect(rules({ intent: "project", question, files: ["appointment-scheduling"] })).toEqual(["appointment-scheduling", "all-work"]);
+    }
   });
 
   // Exclusivity and caps.
   it("never See my work and See my full work together; all-work only after a project", () => {
     expect(rules({ intent: "experience" }, ["work", "all-work"])).toEqual(["work"]);
     expect(rules({ intent: "experience" }, ["all-work", "about"])).toEqual(["about"]);
-    expect(rules({ intent: "experience" }, ["care-scribe", "all-work"])).toEqual(["care-scribe", "all-work"]);
+    expect(rules({ intent: "experience", files: ["experience"] }, ["care-scribe", "all-work"])).toEqual(["care-scribe", "all-work"]);
+    // A project the model suggests with nothing behind it is dropped.
+    expect(rules({ intent: "experience", files: ["experience"] }, ["system", "about"])).toEqual(["about"]);
   });
 
   it("at most 2 (contact 3), no duplicates, unknown ids dropped", () => {
