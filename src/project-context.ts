@@ -2,7 +2,7 @@
 // "What problem were you solving?" means the project the visitor is reading, or the one the
 // conversation was just about. With neither, Jo asks which project instead of guessing.
 
-import { namedProjects } from "./buttons";
+import { namedProjects, projectsInQuestion } from "./buttons";
 import type { AskInput } from "./guard/validate";
 import type { Knowledge } from "./knowledge";
 
@@ -29,14 +29,19 @@ export function pageProject(page: string | undefined): string | null {
  */
 export function projectInContext(knowledge: Knowledge, input: AskInput): string | null {
   const one = (text: string) => {
-    const found = [...new Set(namedProjects(knowledge, text, "").map((id) => (id === "appointment-scheduling-page" ? "appointment-scheduling" : id)))];
+    const found = projectsInQuestion(knowledge, text);
+    return found.length === 1 ? found[0]! : null;
+  };
+  // Jo's own words: only project names count, not keywords ("the system generates the slots").
+  const oneNamed = (text: string) => {
+    const found = [...new Set(namedProjects(knowledge, "", text).map((id) => (id === "appointment-scheduling-page" ? "appointment-scheduling" : id)))];
     return found.length === 1 ? found[0]! : null;
   };
   const last = input.history?.at(-1);
   return (
     one(input.question) ??
     (input.quote ? one(input.quote) : null) ??
-    (last ? one(last.q) ?? one(last.a) : null) ??
+    (last ? one(last.q) ?? oneNamed(last.a) : null) ??
     pageProject(input.page)
   );
 }
@@ -50,6 +55,6 @@ export const WHICH_PROJECT = "Which project do you mean: Appointment scheduling,
 export function whichProject(knowledge: Knowledge, input: AskInput): string | null {
   if (!isProjectDetailQuestion(input.question)) return null;
   // Two projects named ("compare System and CARE Scribe") is not ambiguous either.
-  if (namedProjects(knowledge, input.question, "").length > 1) return null;
+  if (projectsInQuestion(knowledge, input.question).length > 1) return null;
   return projectInContext(knowledge, input) ? null : WHICH_PROJECT;
 }

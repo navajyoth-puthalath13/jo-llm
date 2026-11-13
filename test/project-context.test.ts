@@ -42,6 +42,14 @@ describe("which project a question is about", () => {
   it("answers directly when the question names the project, or isn't about a project's details", () => {
     expect(whichProject(knowledge, input({ question: "What problem were you solving in appointment scheduling?" }))).toBeNull();
     expect(whichProject(knowledge, input({ question: "Who were the users of CARE Scribe?" }))).toBeNull();
+    // A keyword is enough: "scheduling", "slots", "the scribe".
+    expect(projectInContext(knowledge, input({ question: "What did you learn from the scheduling project?" }))).toBe("appointment-scheduling");
+    expect(projectInContext(knowledge, input({ question: "What problem did the slots cause?" }))).toBe("appointment-scheduling");
+    expect(projectInContext(knowledge, input({ question: "Who were the users of the scribe?" }))).toBe("care-scribe");
+    // Jo's previous answer counts only by project name.
+    const history = [{ q: "How are slots made?", a: "The system generates the slots." }];
+    expect(projectInContext(knowledge, input({ question: "Did it ship?", history }))).toBe("appointment-scheduling");
+    expect(projectInContext(knowledge, input({ question: "Did it ship?", history: [{ q: "hi", a: "The system is busy." }] }))).toBeNull();
     for (const question of ["What problems do you like solving?", "How can I contact you?", "What projects have you worked on?", "hi"]) {
       expect(whichProject(knowledge, input({ question })), question).toBeNull();
     }

@@ -15,7 +15,7 @@ import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
 /** Bump when the rules below change, so cached answers pick up the new buttons. */
-export const BUTTON_RULES_VERSION = 8;
+export const BUTTON_RULES_VERSION = 9;
 
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -80,6 +80,22 @@ export const endsWithQuestion = (text: string) => /\?["'”’)]*\s*$/.test(text
 
 const mentionsEmail = (text: string) => /@|\bemail\b|\be-mail\b/i.test(text);
 
+/**
+ * Where Jo's answer names a project, or -1. Case-sensitive, as Jo writes names capitalized: "System"
+ * is the project, "a hospital information system" and "the system generates the slots" are not,
+ * and neither is "design system" or "Information System".
+ */
+function nameInAnswer(answer: string, title: string): number {
+  // "Appointment scheduling" may be written "appointment-scheduling".
+  const name = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "[ -]");
+  // A one-word title like "System" is also an ordinary word, so only its capitalized form counts.
+  // Multi-word titles are distinctive in any case.
+  const flags = title.includes(" ") ? "gi" : "g";
+  const re = new RegExp(`(?<!\\b(?:[Dd]esign|[Ii]nformation|[Oo]perating|[Mm]anagement|[Bb]ooking|[Ss]cheduling|[Hh]ospital) )\\b${name}\\b`, flags);
+  for (const m of answer.matchAll(re)) return m.index!;
+  return -1;
+}
+
 /** Projects named in the question (first) or the answer, by their file keywords, in order of mention. */
 export function namedProjects(knowledge: Knowledge, question: string, answer: string): string[] {
   const found: { id: string; at: number }[] = [];
@@ -93,11 +109,28 @@ export function namedProjects(knowledge: Knowledge, question: string, answer: st
     const names = [title, ...file.keywords.filter((k) => k.includes(" ") || k.includes("-"))];
     const at = (text: string, n: string) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).exec(text.toLowerCase())?.index ?? -1;
     const inQuestion = names.map((n) => at(question, n)).filter((i) => i >= 0);
-    const inAnswer = [at(answer, title)].filter((i) => i >= 0);
+    const inAnswer = [nameInAnswer(answer, file.title)].filter((i) => i >= 0);
     if (inQuestion.length) found.push({ id: fileId, at: Math.min(...inQuestion) });
     else if (inAnswer.length) found.push({ id: fileId, at: 10_000 + Math.min(...inAnswer) });
   }
   return found.sort((a, b) => a.at - b.at).map((f) => f.id);
+}
+
+/**
+ * Projects a question points at, by name or by any of their keywords ("the scheduling project",
+ * "appointment slots", "the scribe"). Wider than namedProjects; used to tell whether a question is
+ * about one project, never to read Jo's answer.
+ */
+export function projectsInQuestion(knowledge: Knowledge, question: string): string[] {
+  const q = question.toLowerCase();
+  const found = new Set(namedProjects(knowledge, question, ""));
+  for (const fileId of ["system", "care-scribe", "guideline-agent", "appointment-scheduling"]) {
+    const file = knowledge.byId.get(fileId);
+    if (!file) continue;
+    const words = [file.title.toLowerCase(), ...file.keywords.map((k) => k.toLowerCase())];
+    if (words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(q))) found.add(fileId);
+  }
+  return [...found].map((id) => (id === "appointment-scheduling-page" ? "appointment-scheduling" : id)).filter((id, i, all) => all.indexOf(id) === i);
 }
 
 /** Buttons from the routed files' frontmatter, used when the picker call fails. */
@@ -113,10 +146,14 @@ export function fallbackCandidates(knowledge: Knowledge, files: string[]): strin
 export function projectButton(knowledge: Knowledge, ctx: ButtonContext): string | null {
   const inQuestion = namedProjects(knowledge, ctx.question, "")[0];
   if (inQuestion) return PROJECT_BUTTONS[inQuestion]!;
-  const routed = ctx.files.find((f) => PROJECT_BUTTONS[f]);
-  if (routed) return PROJECT_BUTTONS[routed]!;
-  const inAnswer = namedProjects(knowledge, "", ctx.answer)[0];
-  return inAnswer ? PROJECT_BUTTONS[inAnswer]! : null;
+  const inAnswer = namedProjects(knowledge, "", ctx.answer).map((f) => PROJECT_BUTTONS[f]!);
+  const routed = ctx.files.filter((f) => PROJECT_BUTTONS[f]).map((f) => PROJECT_BUTTONS[f]!);
+  // The routed project, unless Jo's answer is about a different one ("newest project?" routed to
+  // System, answered with Appointment scheduling).
+  const routedAndNamed = routed.find((r) => inAnswer.includes(r));
+  if (routedAndNamed) return routedAndNamed;
+  if (inAnswer.length === 1) return inAnswer[0]!;
+  return routed[0] ?? inAnswer[0] ?? null;
 }
 
 /** Intents whose buttons are fully decided in code, so the picker model isn't called. */
@@ -125,7 +162,8 @@ const DECIDED: Partial<Record<Intent, string[]>> = {
   contact: CONTACT,
   private: ["email"],
   resume: ["resume", "email"],
-  work_overview: ["work", "system"],
+  // The newest case study, the first card in the work section, not System.
+  work_overview: ["work", "appointment-scheduling"],
   about: ["email", "about"],
   how_i_work: ["work", "about"],
   availability: ["email", "resume"],
@@ -137,7 +175,7 @@ const DECIDED: Partial<Record<Intent, string[]>> = {
  *
  * | intent                         | buttons                                   |
  * | one specific project           | that project, then all-work               |
- * | work overview                  | work, then system                         |
+ * | work overview                  | work, then appointment-scheduling         |
  * | about / who are you / AI       | email, then about                         |
  * | contact                        | email, linkedin, x                        |
  * | resume                         | resume, then email                        |
@@ -158,7 +196,7 @@ const DECIDED: Partial<Record<Intent, string[]>> = {
  * an answer naming two or more projects is an overview, and small talk that invites email
  * ("are you an AI?", often routed as small talk) is about him.
  */
-const IDENTITY = /\b(?:are you (?:an? )?(?:ai|bot|robot|real|human|person|chatgpt|llm)|who are you|who is this|who am i (?:talking|speaking) (?:to|with)|what are you)\b/i;
+const IDENTITY = /\b(?:are you (?:an? )?(?:ai|bot|robot|real|human|person|chatgpt|llm)|who are you|who is this|who am i (?:talking|speaking) (?:to|with)|what are you(?=\s*[?.!]*\s*$))\b/i;
 
 export function buttonIntent(knowledge: Knowledge, ctx: ButtonContext): Intent {
   const { intent } = ctx;
@@ -169,6 +207,10 @@ export function buttonIntent(knowledge: Knowledge, ctx: ButtonContext): Intent {
   // "how I work" ("where did the factor-based idea come from?").
   const inQuestion = new Set(namedProjects(knowledge, ctx.question, "").map((f) => PROJECT_BUTTONS[f]));
   if (inQuestion.size === 1 && ["how_i_work", "experience", "about"].includes(intent)) return "project";
+  // …and so is one whose keywords point at the one project Jo answered from ("what are you working
+  // on right now?" → System).
+  const pointed = projectsInQuestion(knowledge, ctx.question).filter((f) => ctx.files.includes(f));
+  if (pointed.length === 1 && ["how_i_work", "about"].includes(intent)) return "project";
   const fixed: Intent[] = ["contact", "private", "resume", "availability", "hire_me", "how_i_work", "writing", "photography"];
   if (!fixed.includes(intent) && namedProjects(knowledge, "", ctx.answer).length >= 2 && namedProjects(knowledge, ctx.question, "").length === 0) {
     return "work_overview";
@@ -192,7 +234,18 @@ export function applyButtonRules(knowledge: Knowledge, raw: ButtonContext, candi
   if (intent === "private") return finish(ctx, ["email"], USUAL_MAX);
 
   // Known catalog ids only, lowercased, without duplicates. Anything else is dropped.
-  const ids = [...new Set(candidates.map((c) => c.trim().toLowerCase()).filter((c) => HREF_BY_ID.has(c)))];
+  // A project button the model suggests must be backed: that project is named in the question or the
+  // answer, or it's the routed project, or the routed file lists it. Otherwise "a hospital information system" gets System.
+  const backed = new Set([
+    ...namedProjects(knowledge, ctx.question, ctx.answer).map((f) => PROJECT_BUTTONS[f]!),
+    ...ctx.files.filter((f) => PROJECT_BUTTONS[f]).map((f) => PROJECT_BUTTONS[f]!),
+    // …or the file Jo answered from lists it (experience.md lists both CARE case studies).
+    ...fallbackCandidates(knowledge, ctx.files),
+  ]);
+  const projectIds = new Set(Object.values(PROJECT_BUTTONS));
+  const ids = [...new Set(candidates.map((c) => c.trim().toLowerCase()).filter((c) => HREF_BY_ID.has(c)))].filter(
+    (id) => !projectIds.has(id) || backed.has(id),
+  );
   const project = intent === "project" ? projectButton(knowledge, ctx) : null;
 
   let order: string[];
@@ -224,7 +277,8 @@ function isAboutCare(knowledge: Knowledge, ctx: ButtonContext): boolean {
   if (!["about", "experience", "work_overview", "project", "how_i_work"].includes(ctx.intent)) return false;
   if ((ctx.page ?? "").startsWith("/work/")) return false; // on a case study, CARE means that one
   if (!ABOUT_CARE.test(ctx.question.replace(/\bcare scribe\b/gi, ""))) return false;
-  return namedProjects(knowledge, ctx.question, "").length === 0;
+  // "How does CARE generate appointment slots?" is about Appointment scheduling.
+  return projectsInQuestion(knowledge, ctx.question).length === 0;
 }
 
 /** Shared filters and the cap. */
