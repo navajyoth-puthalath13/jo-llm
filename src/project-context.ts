@@ -40,8 +40,8 @@ const PROJECT_DETAIL = new RegExp(
     "what were the iterations",
     "what(?:'s| is) the status",
     "any updates?",
-    "how(?:'s| is) it going",
-    "where does it stand",
+    `how(?:'s| is) ${PROJECT_PRONOUN} going`,
+    `where does ${PROJECT_PRONOUN} stand`,
   ].join("|")})\\b`,
   "i",
 );

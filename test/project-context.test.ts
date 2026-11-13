@@ -26,7 +26,11 @@ describe("which project a question is about", () => {
       "What's the status?",
       "Any updates?",
       "How's it going?",
+      "How's this going?",
+      "How's that going?",
       "Where does it stand?",
+      "Where does this stand?",
+      "Where does that stand?",
       "What was your role?",
       "Walk me through the process",
     ]) {
