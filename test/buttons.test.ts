@@ -146,8 +146,43 @@ describe("button rules (first = primary, second = secondary)", () => {
     expect(rules({ intent: "work_overview", page: "/" })).toEqual(["work", "system"]);
   });
 
-  it("a project button removed on its own page isn't replaced: all-work never leads", () => {
-    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", page: "/work/care-scribe" })).toEqual([]);
+  it("on a project's own page, its button gives way to all-work", () => {
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe", page: "/work/care-scribe" })).toEqual(["all-work"]);
+    expect(rules({ intent: "project", question: "Who were the users?", files: ["appointment-scheduling"], page: "/work/appointment-scheduling" })).toEqual(["all-work"]);
+    // all-work still never leads anywhere else.
+    expect(rules({ intent: "about", page: "/work/care-scribe" }, ["all-work"])).not.toContain("all-work");
+  });
+
+  it("CARE itself gets both CARE case studies, never System or one of them alone", () => {
+    for (const question of ["What is CARE?", "what is care", "Tell me about CARE"]) {
+      for (const intent of ["about", "experience", "work_overview", "project"] as const) {
+        expect(rules({ intent, question, answer: "CARE is a hospital information system by Open Healthcare Network." }), `${intent}: ${question}`).toEqual([
+          "appointment-scheduling",
+          "care-scribe",
+        ]);
+      }
+    }
+    // Naming a CARE project is that project, and "care about" isn't CARE.
+    expect(rules({ intent: "project", question: "Tell me about CARE Scribe" })).toEqual(["care-scribe", "all-work"]);
+    expect(rules({ intent: "how_i_work", question: "What do you care about in design?" })).toEqual(["work", "about"]);
+  });
+
+  it("the routed project beats a project name that's just a word in the answer", () => {
+    expect(
+      rules({
+        intent: "project",
+        question: "Who uses appointment templates?",
+        files: ["appointment-scheduling"],
+        answer: "Doctors and nurses set them up, and the system generates the slots.",
+        page: "/work/appointment-scheduling",
+      }),
+    ).toEqual(["all-work"]);
+  });
+
+  it("appointment questions never get the CARE Scribe button", () => {
+    for (const question of ["Who uses appointment templates?", "What was wrong with the old appointment template form?"]) {
+      expect(rules({ intent: "project", question, files: ["appointment-scheduling"] })).toEqual(["appointment-scheduling", "all-work"]);
+    }
   });
 
   // Exclusivity and caps.

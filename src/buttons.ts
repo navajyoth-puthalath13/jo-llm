@@ -15,7 +15,7 @@ import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
 /** Bump when the rules below change, so cached answers pick up the new buttons. */
-export const BUTTON_RULES_VERSION = 7;
+export const BUTTON_RULES_VERSION = 8;
 
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -105,12 +105,18 @@ export function fallbackCandidates(knowledge: Knowledge, files: string[]): strin
   return files.flatMap((id) => knowledge.byId.get(id)?.actions ?? []);
 }
 
-/** The one project an answer is about: named in the question or answer, else the routed project file. */
+/**
+ * The one project an answer is about: named in the question, else the routed project file (the page
+ * or conversation it's about), else named in the answer. The answer comes last because ordinary words
+ * collide with project names ("the system generates the slots" isn't about System).
+ */
 export function projectButton(knowledge: Knowledge, ctx: ButtonContext): string | null {
-  const named = namedProjects(knowledge, ctx.question, ctx.answer)[0];
-  if (named) return PROJECT_BUTTONS[named]!;
+  const inQuestion = namedProjects(knowledge, ctx.question, "")[0];
+  if (inQuestion) return PROJECT_BUTTONS[inQuestion]!;
   const routed = ctx.files.find((f) => PROJECT_BUTTONS[f]);
-  return routed ? PROJECT_BUTTONS[routed]! : null;
+  if (routed) return PROJECT_BUTTONS[routed]!;
+  const inAnswer = namedProjects(knowledge, "", ctx.answer)[0];
+  return inAnswer ? PROJECT_BUTTONS[inAnswer]! : null;
 }
 
 /** Intents whose buttons are fully decided in code, so the picker model isn't called. */
@@ -170,10 +176,15 @@ export function buttonIntent(knowledge: Knowledge, ctx: ButtonContext): Intent {
   return intent;
 }
 
+/** "What is CARE?": the platform both CARE case studies are about, not one of them. */
+const ABOUT_CARE = /\bCARE\b|\b(?:what(?:'s| is)|about|in|on|for|with) care\b(?! (?:about|for|of)\b)/;
+const CARE_CASES = ["appointment-scheduling", "care-scribe"];
+
 export function applyButtonRules(knowledge: Knowledge, raw: ButtonContext, candidates: string[]): string[] {
   const ctx = { ...raw, intent: buttonIntent(knowledge, raw) };
   const { intent } = ctx;
   if (intent === "smalltalk") return [];
+  if (isAboutCare(knowledge, ctx)) return finish(ctx, [...CARE_CASES], USUAL_MAX);
   // "Why hire you?": while Jo is asking what role, no buttons (the reply box is the next step);
   // once it has answered for a role, email first.
   if (intent === "hire_me") return finish(ctx, endsWithQuestion(ctx.answer) ? [] : ["email", "work"], USUAL_MAX);
@@ -208,19 +219,33 @@ export function applyButtonRules(knowledge: Knowledge, raw: ButtonContext, candi
   return finish(ctx, order, USUAL_MAX);
 }
 
+/** Asks about CARE itself: no single project named, and not a contact/hire/private question. */
+function isAboutCare(knowledge: Knowledge, ctx: ButtonContext): boolean {
+  if (!["about", "experience", "work_overview", "project", "how_i_work"].includes(ctx.intent)) return false;
+  if ((ctx.page ?? "").startsWith("/work/")) return false; // on a case study, CARE means that one
+  if (!ABOUT_CARE.test(ctx.question.replace(/\bcare scribe\b/gi, ""))) return false;
+  return namedProjects(knowledge, ctx.question, "").length === 0;
+}
+
 /** Shared filters and the cap. */
 function finish(ctx: ButtonContext, order: string[], max: number): string[] {
   const page = (ctx.page ?? "").replace(/\/+$/, "") || "/";
   const out: string[] = [];
+  let skippedProject = false; // the project button was dropped because the visitor is on its page
   for (const id of order) {
     const a = HREF_BY_ID.get(id);
     if (!a || out.includes(id)) continue;
     // Never send the visitor to the page they're already on.
-    if (a.kind === "internal" && (a.href.replace(/\/+$/, "") || "/") === page) continue;
+    if (a.kind === "internal" && (a.href.replace(/\/+$/, "") || "/") === page) {
+      if (Object.values(PROJECT_BUTTONS).includes(id) && out.length === 0) skippedProject = true;
+      continue;
+    }
     // "See my work" and "See my full work" go to the same place: never both.
     if ((id === "work" && out.includes("all-work")) || (id === "all-work" && out.includes("work"))) continue;
     // all-work is only ever the secondary after a specific project.
-    if (id === "all-work" && !(out.length === 1 && Object.values(PROJECT_BUTTONS).includes(out[0]!))) continue;
+    // On the project's own page, all-work takes its place.
+    const afterProject = (out.length === 1 && Object.values(PROJECT_BUTTONS).includes(out[0]!)) || (out.length === 0 && skippedProject);
+    if (id === "all-work" && !afterProject) continue;
     out.push(id);
   }
   return out.slice(0, max);
@@ -244,6 +269,7 @@ export async function pickButtons(o: PickOptions): Promise<PickedButtons> {
   const { ctx } = o;
   // Most intents are fully decided by the rules; don't spend a call on them.
   const intent = buttonIntent(o.knowledge, ctx);
+  if (isAboutCare(o.knowledge, { ...ctx, intent })) return { ids: applyButtonRules(o.knowledge, ctx, []), source: "rules" };
   if (DECIDED[intent] || intent === "private" || intent === "hire_me" || (intent === "project" && projectButton(o.knowledge, ctx))) {
     return { ids: applyButtonRules(o.knowledge, ctx, []), source: "rules" };
   }

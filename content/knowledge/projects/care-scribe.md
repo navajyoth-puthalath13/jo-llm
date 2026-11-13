@@ -2,11 +2,11 @@
 id: care-scribe
 title: CARE Scribe
 covers: what it is, my role, what the team did versus me, what I explored, the proposed direction, status, what I'm proud of
-keywords: [care scribe, scribe, care, ohc, open healthcare network, healthcare, clinician, clinicians, doctor, doctors, hospital, consultation, notes, clinical notes, wearable, microphone, mobile capture, phone]
+keywords: [care scribe, scribe, consultation, consultations, notes, clinical notes, documentation, wearable, microphone, mobile capture, phone, conversation capture]
 actions: [care-scribe]
 ---
 
-- CARE is a hospital information system developed by Open Healthcare Network.
+- CARE is a hospital information system developed by Open Healthcare Network. CARE Scribe is one of my two CARE case studies; the other is Appointment scheduling. They are separate projects: never mix their facts.
 - CARE Scribe helps turn doctor–patient conversations into clinical notes.
 - My case study explores how conversation capture could follow clinicians when they move away from their workstation.
 - My role: as part of my open-source design contribution to Open Healthcare Network, I explored this direction independently and proposed it to the CARE team. It was an initiative I took on outside my assigned work.

@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { KNOWLEDGE_SOURCES } from "../content/knowledge/index";
 import { resolveActions } from "./actions";
 import { cacheKey, chunkAnswer, getCached, putCached } from "./cache";
+import { pageProject } from "./project-context";
 import { isAllowedOrigin, loadConfig, type Config, type Env } from "./config";
 import { isEnabled } from "./guard/killswitch";
 import { applyMode, MODE_KEY, readMode } from "./guard/mode";
@@ -168,7 +169,9 @@ export function createApp(deps: AppDeps) {
     trace("4 limits", "✓ under the per-IP limits");
 
     const cacheable = !input.quote && !input.history?.length;
-    const key = cacheable ? await cacheKey(input.question, cacheScope, input.format ?? "flat") : null;
+    // On a case study page, "who were the users?" is about that project, so the page is part of the key.
+    const page = pageProject(input.page);
+    const key = cacheable ? await cacheKey(input.question, page ? `${cacheScope}\npage:${page}` : cacheScope, input.format ?? "flat") : null;
     if (!key) trace("5 cache", "skipped: questions with a quote or history are never cached");
 
     if (key) {
