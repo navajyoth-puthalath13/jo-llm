@@ -13,9 +13,38 @@ const PAGE_PROJECT: Record<string, string> = {
   "/work/a11y-agent": "guideline-agent",
 };
 
+// A stand-in for "the project" when nothing names which one ("it", "this", "the feature"...),
+// and the status words a visitor might ask it's reached ("is it live", "has this shipped",
+// "done yet"). Built from these two pieces, not one literal phrase per wording, so a new way of
+// asking the same open-ended question ("is it out", "has it launched") is covered without
+// another regex clause.
+const PROJECT_PRONOUN = "(?:it|this|that|the project|the feature|the case study|the solution)";
+const STATUS_WORD = "(?:live|ship(?:ped)?|out|releas(?:e|ed)|launch(?:ed)?|done|finish(?:ed)?|complet(?:e|ed)|ready|deploy(?:ed)?|work(?:ing)?|built)";
+
 /** A question about "the" project that only makes sense once you know which project. */
-const PROJECT_DETAIL =
-  /\b(?:(?:what|which) (?:was|were|is|are) the (?:problems?|challenges?|pain points?)|(?:what|which) (?:problems?|challenges?) (?:were|was|did) you|what(?:'s| is| was) the problem you|(?:(?:who|what) (?:were|are|was|is) the (?:users?|outcomes?|results?|solution|impact|constraints?)|who (?:used|uses|is it for|was it for)|what did you (?:learn|propose|design|build|change|find)|what (?:was|is) your role|did it ship|was it shipped|is (?:it|this|that) (?:live|shipped|out|released)|live yet|what would you do differently|walk me through (?:the|your) (?:process|iterations?|project|case study)|how many iterations|what was wrong with|what were the iterations))\b/i;
+const PROJECT_DETAIL = new RegExp(
+  `\\b(?:${[
+    "(?:what|which) (?:was|were|is|are) the (?:problems?|challenges?|pain points?)",
+    "(?:what|which) (?:problems?|challenges?) (?:were|was|did) you",
+    "what(?:'s| is| was) the problem you",
+    "(?:who|what) (?:were|are|was|is) the (?:users?|outcomes?|results?|solution|impact|constraints?)",
+    "who (?:used|uses|is it for|was it for)",
+    "what did you (?:learn|propose|design|build|change|find)",
+    "what (?:was|is) your role",
+    `(?:is|was|does|did|has|will|can|could) ${PROJECT_PRONOUN} (?:\\w+\\s+){0,2}${STATUS_WORD}`,
+    `${STATUS_WORD} yet`,
+    "what would you do differently",
+    "walk me through (?:the|your) (?:process|iterations?|project|case study)",
+    "how many iterations",
+    "what was wrong with",
+    "what were the iterations",
+    "what(?:'s| is) the status",
+    "any updates?",
+    "how(?:'s| is) it going",
+    "where does it stand",
+  ].join("|")})\\b`,
+  "i",
+);
 
 /** The project file for the page the visitor is on, if it's a case study page. */
 export function pageProject(page: string | undefined): string | null {

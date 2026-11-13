@@ -2,7 +2,7 @@
 id: appointment-scheduling
 title: Appointment scheduling
 covers: my case study "When scheduling isn't straightforward": reworking CARE's appointment template form at OHC; the problems (unclear settings, fractional slot errors, far-away error pop-ups), the three slot-logic iterations, the decisions, the solution and what I learned
-keywords: [appointment scheduling, appointment, appointments, scheduling, schedule, schedule template, appointment template, template, slot, slots, slot duration, fractional, factor, factors, factor-based, shift hours, session, sessions, booking, private, public, weekdays, inline feedback, inline errors, validation, when scheduling isn't straightforward, new case study, latest case study, status, update, updates, date picker]
+keywords: [appointment scheduling, appointment, appointments, scheduling, schedule, schedule template, appointment template, template, slot, slots, slot duration, fractional, factor, factors, factor-based, shift hours, session, sessions, booking, private, public, weekdays, inline feedback, inline errors, validation, when scheduling isn't straightforward, new case study, latest case study, date picker]
 actions: [appointment-scheduling]
 ---
 
