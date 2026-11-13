@@ -49,7 +49,24 @@ export function projectInContext(knowledge: Knowledge, input: AskInput): string 
 export const isProjectDetailQuestion = (question: string) => PROJECT_DETAIL.test(question);
 
 /** Jo's question back when a project-detail question doesn't say which project. */
-export const WHICH_PROJECT = "Which project do you mean: Appointment scheduling, CARE Scribe, System or Guideline Agent?";
+export const WHICH_PROJECT_START = "Which project do you mean";
+export const WHICH_PROJECT = `${WHICH_PROJECT_START}: Appointment scheduling, CARE Scribe, System or Guideline Agent?`;
+
+/**
+ * The visitor's reply to "Which project do you mean?" (typed, or a tapped reply button): the question
+ * they asked before, now about the project they named. Anything else comes back unchanged.
+ */
+export function resolveWhichProjectReply(knowledge: Knowledge, input: AskInput): AskInput {
+  const last = input.history?.at(-1);
+  if (!last || !last.a.startsWith(WHICH_PROJECT_START)) return input;
+  const named = projectsInQuestion(knowledge, input.question);
+  // A reply that is itself a full question ("What did you learn from CARE Scribe?") stands on its own.
+  if (named.length !== 1 || isProjectDetailQuestion(input.question)) return input;
+  const title = knowledge.byId.get(named[0]!)?.title ?? named[0]!;
+  const history = input.history!.slice(0, -1);
+  const { history: _dropped, ...rest } = input;
+  return { ...rest, question: `${last.q} (${title})`.slice(0, 300), ...(history.length ? { history } : {}) };
+}
 
 /** WHICH_PROJECT when the question needs a project and nothing says which one; otherwise null. */
 export function whichProject(knowledge: Knowledge, input: AskInput): string | null {

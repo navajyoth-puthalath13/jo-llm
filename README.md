@@ -48,6 +48,7 @@ The response is `text/event-stream` and uses only these events:
 | ------- | -------------------------------------------------------------------- |
 | `token` | `{ "t": "text chunk" }`                                              |
 | `actions` | `{ "actions": [{ "id", "label", "href", "kind": "internal" \| "external" \| "mailto" }] }` (0–4 buttons; optional) |
+| `replies` | `{ "replies": [{ "id", "label", "type": "continue_conversation", "message" }] }` (2–4 reply buttons; only when Jo asked the visitor a question it has set answers for) |
 | `done`  | `{ "cached": boolean, "awaitingReply"?: true }` (`awaitingReply` when Jo's answer ends by asking the visitor something: keep the reply box open and focused) |
 | `error` | `{ "code": "offline" \| "rate_limited" \| "busy" \| "invalid" \| "offtopic" }` |
 
@@ -123,6 +124,15 @@ Each `/ask` that isn't served from the cache makes up to three model calls ([`sr
 - A model that returns 429 is skipped for its `Retry-After` (30 s at most).
 - Gemini rarely fits inside the router's 800 ms, so in practice the router falls back to keywords when Groq is busy.
 - All of these are vars in `wrangler.toml`.
+
+## Reply buttons
+
+When Jo asks the visitor something with a known set of answers, a `replies` event follows the answer (after `actions`, before `done`). Each reply has a `label` to show and a `message` to send: on tap, the site sends `message` as the visitor's next question, with the usual `history`. Typing the same words does the same thing.
+
+- "Which project do you mean?" → Appointment scheduling, CARE Scribe, System, Guideline Agent. The server then answers the earlier question for that project ([`resolveWhichProjectReply`](src/project-context.ts)).
+- "What role are you hiring for?" → Junior product designer, UX designer.
+
+The shape follows OpenUI's `@ToAssistant` action (label + message, a `continue_conversation` event). No model writes replies: [`src/replies.ts`](src/replies.ts) derives them from Jo's answer, so cached answers get them too. Clients that don't know the event ignore it.
 
 ## Buttons (actions)
 

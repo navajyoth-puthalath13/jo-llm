@@ -11,7 +11,7 @@ import { renderKnowledge, type Knowledge } from "./knowledge";
 import { buildSystemPrompt, buildUserMessage, rulesFor } from "./prompt";
 import { firstTokenTimeouts } from "./providers/router";
 import type { Provider } from "./providers/types";
-import { isProjectDetailQuestion, projectInContext, whichProject } from "./project-context";
+import { isProjectDetailQuestion, projectInContext, resolveWhichProjectReply, whichProject } from "./project-context";
 import { filesForAnswer, MAX_ROUTED_FILES, routeQuestion, type Route } from "./route";
 
 /** Everything an answer depends on. Any change to a knowledge file, the rules or the catalog
@@ -43,8 +43,11 @@ export interface JoResult {
   buttonSource?: "model" | "fallback" | "rules";
 }
 
-export async function runJo(o: JoRunOptions): Promise<JoResult> {
+export async function runJo(opts: JoRunOptions): Promise<JoResult> {
+  // "Appointment scheduling", after Jo asked which project: the earlier question, about that project.
+  const o = { ...opts, input: resolveWhichProjectReply(opts.knowledge, opts.input) };
   const t = o.trace ?? (() => {});
+  if (o.input !== opts.input) t("7 route", `reply to "which project?": asking ${JSON.stringify(o.input.question)}`);
 
   // 0. "What problem were you solving?" with no project in sight: ask which one, no model call.
   const ask = whichProject(o.knowledge, o.input);
