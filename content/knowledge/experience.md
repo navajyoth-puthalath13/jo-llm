@@ -10,6 +10,7 @@ actions: [care-scribe]
 - How long: 11 months. Say "11 months of experience", never "about a year" or "1 year".
 - At OHC I worked on CARE, an open-source hospital information system.
 - My work there touched product UX, complex hospital workflows, design-system consistency, accessibility and AI-related experiences.
+- From February to April 2026 I reworked CARE's appointment template form (my Appointment scheduling case study), working with an Associate Product Designer and a Lead Product Designer.
 - I also explored how CARE Scribe could better support clinicians who move around during consultations.
 - Alongside that, I've kept learning through my own projects and design explorations.
 - Never give numbers, percentages or outcome metrics for my work, and never invent any. Instead of saying I don't have them, say I'd really love to walk through the problem, the decisions I made and what I learned, over email or over a cup of coffee.

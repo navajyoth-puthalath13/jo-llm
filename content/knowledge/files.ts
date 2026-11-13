@@ -15,6 +15,8 @@ export const KNOWLEDGE_FILES = [
   "accessibility.md",
   "tools.md",
   "projects/overview.md",
+  "projects/appointment-scheduling.md",
+  "projects/appointment-scheduling-page.md",
   "projects/system.md",
   "projects/care-scribe.md",
   "projects/guideline-agent.md",

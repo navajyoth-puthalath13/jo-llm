@@ -42,7 +42,7 @@ export interface Route {
 }
 
 const INTENT_HELP: Record<Intent, string> = {
-  project: "a specific project (System, CARE Scribe, Guideline Agent)",
+  project: "a specific project (Appointment scheduling, System, CARE Scribe, Guideline Agent), including what's shown on its page",
   work_overview: "his work or projects in general, or which one to look at first",
   about: "who he is, his name, where he's based, whether this is an AI",
   experience: "his jobs, Open Healthcare Network, years of experience, impact",
@@ -156,6 +156,8 @@ const INTENT_FOR_FILE: Record<string, Intent> = {
   system: "project",
   "care-scribe": "project",
   "guideline-agent": "project",
+  "appointment-scheduling": "project",
+  "appointment-scheduling-page": "project",
   overview: "work_overview",
   experience: "experience",
   availability: "availability",

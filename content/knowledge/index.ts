@@ -13,6 +13,8 @@ import howIWork from "./how-i-work.md";
 import accessibility from "./accessibility.md";
 import tools from "./tools.md";
 import overview from "./projects/overview.md";
+import appointmentScheduling from "./projects/appointment-scheduling.md";
+import appointmentSchedulingPage from "./projects/appointment-scheduling-page.md";
 import system from "./projects/system.md";
 import careScribe from "./projects/care-scribe.md";
 import guidelineAgent from "./projects/guideline-agent.md";
@@ -39,6 +41,8 @@ export const KNOWLEDGE_SOURCES: KnowledgeSource[] = [
   { path: "accessibility.md", text: accessibility },
   { path: "tools.md", text: tools },
   { path: "projects/overview.md", text: overview },
+  { path: "projects/appointment-scheduling.md", text: appointmentScheduling },
+  { path: "projects/appointment-scheduling-page.md", text: appointmentSchedulingPage },
   { path: "projects/system.md", text: system },
   { path: "projects/care-scribe.md", text: careScribe },
   { path: "projects/guideline-agent.md", text: guidelineAgent },
