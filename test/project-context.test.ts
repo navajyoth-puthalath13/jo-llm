@@ -15,6 +15,9 @@ describe("which project a question is about", () => {
       "Who were the users?",
       "What did you learn?",
       "Did it ship?",
+      "Is this live yet?",
+      "Is it live?",
+      "Is it shipped?",
       "What was your role?",
       "Walk me through the process",
     ]) {

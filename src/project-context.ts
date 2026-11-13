@@ -15,7 +15,7 @@ const PAGE_PROJECT: Record<string, string> = {
 
 /** A question about "the" project that only makes sense once you know which project. */
 const PROJECT_DETAIL =
-  /\b(?:(?:what|which) (?:was|were|is|are) the (?:problems?|challenges?|pain points?)|(?:what|which) (?:problems?|challenges?) (?:were|was|did) you|what(?:'s| is| was) the problem you|(?:(?:who|what) (?:were|are|was|is) the (?:users?|outcomes?|results?|solution|impact|constraints?)|who (?:used|uses|is it for|was it for)|what did you (?:learn|propose|design|build|change|find)|what (?:was|is) your role|did it ship|was it shipped|what would you do differently|walk me through (?:the|your) (?:process|iterations?|project|case study)|how many iterations|what was wrong with|what were the iterations))\b/i;
+  /\b(?:(?:what|which) (?:was|were|is|are) the (?:problems?|challenges?|pain points?)|(?:what|which) (?:problems?|challenges?) (?:were|was|did) you|what(?:'s| is| was) the problem you|(?:(?:who|what) (?:were|are|was|is) the (?:users?|outcomes?|results?|solution|impact|constraints?)|who (?:used|uses|is it for|was it for)|what did you (?:learn|propose|design|build|change|find)|what (?:was|is) your role|did it ship|was it shipped|is (?:it|this|that) (?:live|shipped|out|released)|live yet|what would you do differently|walk me through (?:the|your) (?:process|iterations?|project|case study)|how many iterations|what was wrong with|what were the iterations))\b/i;
 
 /** The project file for the page the visitor is on, if it's a case study page. */
 export function pageProject(page: string | undefined): string | null {
