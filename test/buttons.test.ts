@@ -76,6 +76,13 @@ describe("button rules (first = primary, second = secondary)", () => {
     ]);
   });
 
+  it("a question naming one project gets that project's buttons, even when routed as how I work", () => {
+    expect(rules({ intent: "how_i_work", question: "Where did the factor-based idea come from?", answer: "An engineer suggested it." })).toEqual([
+      "appointment-scheduling",
+      "all-work",
+    ]);
+  });
+
   it("greeting → no buttons", () => {
     expect(rules({ intent: "smalltalk", answer: "Hey! How can I help you today?" }, ["system", "email"])).toEqual([]);
   });

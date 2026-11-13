@@ -406,4 +406,39 @@ export const EVAL_CASES: EvalCase[] = [
     contains: [["junior"]],
     buttons: ["email"],
   },
+  // Appointment scheduling case study
+  {
+    name: "scheduling: what",
+    input: { question: "Tell me about your appointment scheduling case study", format: "blocks" },
+    files: ["appointment-scheduling"],
+    contains: [["CARE", "OHC", "Open Healthcare Network"], ["template", "slot"]],
+    never: ["shipped", "launched", "users loved", "usability test", "%"],
+    buttons: ["appointment-scheduling", "all-work"],
+    exactButtons: true,
+  },
+  {
+    name: "scheduling: fractional slots",
+    input: { question: "Why did slots come out as fractions?", format: "blocks" },
+    contains: ["149", ["14.9", "fraction"]],
+    never: ["patients per slot caused", "tokens caused"],
+  },
+  {
+    name: "scheduling: iteration 3 origin",
+    input: { question: "Where did the factor-based idea come from?", format: "blocks" },
+    contains: [["engineer"]],
+    never: ["I came up with", "my own idea"],
+    buttons: ["appointment-scheduling", "all-work"],
+    exactButtons: true,
+  },
+  {
+    name: "scheduling: shipped?",
+    input: { question: "Did the appointment template redesign ship? What were the results?", format: "blocks" },
+    contains: [["isn't written up", "not written up", "aren't written up", "not documented", "email", "coffee"]],
+    never: ["it shipped", "was shipped", "is live", "improved by", "%", "didn't ship", "didn’t ship", "did not ship", "wasn't shipped", "not shipped"],
+  },
+  {
+    name: "scheduling: the tangled line image",
+    input: { question: "What does the tangled line illustration on the scheduling page mean?", format: "blocks", page: "/work/appointment-scheduling" },
+    contains: [["tangled", "messy"], ["clear", "straight"]],
+  },
 ];

@@ -77,6 +77,13 @@ const entries: JoAction[] = [
     when: "visitor asks about System, my design system, its components or registry, or what I'm working on right now",
   },
   {
+    id: "appointment-scheduling",
+    label: "Read scheduling case",
+    href: "/work/appointment-scheduling",
+    kind: "internal",
+    when: "visitor asks about my appointment scheduling case study, CARE appointment templates, slots or my newest case study",
+  },
+  {
     id: "care-scribe",
     label: "Read CARE Scribe",
     href: "/work/care-scribe",

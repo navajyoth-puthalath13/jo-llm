@@ -15,7 +15,7 @@ import type { Intent } from "./route";
 import { structuredCall } from "./structured";
 
 /** Bump when the rules below change, so cached answers pick up the new buttons. */
-export const BUTTON_RULES_VERSION = 6;
+export const BUTTON_RULES_VERSION = 7;
 
 const CONTACT = ["email", "linkedin", "x"];
 const HREF_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
@@ -25,6 +25,8 @@ const PROJECT_BUTTONS: Record<string, string> = {
   system: "system",
   "care-scribe": "care-scribe",
   "guideline-agent": "a11y-agent",
+  "appointment-scheduling": "appointment-scheduling",
+  "appointment-scheduling-page": "appointment-scheduling",
 };
 
 function buttonSystem(): string {
@@ -88,7 +90,7 @@ export function namedProjects(knowledge: Knowledge, question: string, answer: st
     // In Jo's answer only the project's name counts: an answer that mentions "pull requests" while
     // talking about how he works isn't pointing at Guideline Agent.
     const title = file.title.toLowerCase();
-    const names = [title, ...file.keywords.filter((k) => k.includes(" "))];
+    const names = [title, ...file.keywords.filter((k) => k.includes(" ") || k.includes("-"))];
     const at = (text: string, n: string) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).exec(text.toLowerCase())?.index ?? -1;
     const inQuestion = names.map((n) => at(question, n)).filter((i) => i >= 0);
     const inAnswer = [at(answer, title)].filter((i) => i >= 0);
@@ -157,6 +159,10 @@ export function buttonIntent(knowledge: Knowledge, ctx: ButtonContext): Intent {
   // "Are you an AI?", "Who are you?": about him, whatever the router said.
   if (IDENTITY.test(ctx.question)) return "about";
   if (intent === "smalltalk") return mentionsEmail(ctx.answer) ? "about" : intent;
+  // A question naming exactly one project is about that project, even if the router called it
+  // "how I work" ("where did the factor-based idea come from?").
+  const inQuestion = new Set(namedProjects(knowledge, ctx.question, "").map((f) => PROJECT_BUTTONS[f]));
+  if (inQuestion.size === 1 && ["how_i_work", "experience", "about"].includes(intent)) return "project";
   const fixed: Intent[] = ["contact", "private", "resume", "availability", "hire_me", "how_i_work", "writing", "photography"];
   if (!fixed.includes(intent) && namedProjects(knowledge, "", ctx.answer).length >= 2 && namedProjects(knowledge, ctx.question, "").length === 0) {
     return "work_overview";
