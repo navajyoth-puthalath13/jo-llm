@@ -2,7 +2,7 @@
 id: appointment-scheduling-page
 title: Appointment scheduling case study, what's on the page
 covers: what each image, illustration and interactive frame on my appointment scheduling case study page shows, top to bottom, plus its cover and how to move around the page
-keywords: [image, picture, illustration, frame, animation, interactive, cover, hero, card, screenshot, diagram, timeline, tile, shown, what's this, what is this, system map, tangled line, checklist, dr. anaya menon, sage, ruler, appointment scheduling page, results card, live results, chart, full view]
+keywords: [image, picture, illustration, frame, animation, interactive, cover, hero, card, screenshot, diagram, timeline, tile, shown, what's this, what is this, system map, tangled line, checklist, dr. anaya menon, sage, ruler, appointment scheduling page]
 actions: [appointment-scheduling]
 ---
 
@@ -17,7 +17,6 @@ actions: [appointment-scheduling]
 - Exploration tiles: the redesigned pieces (presets, Private or Public, Manual or Auto with live totals); the three slot-logic iterations, each shown first as an animated timeline ("logic") and then as a working form ("interface"), switchable with "Show interface" or "Show logic", with the third tagged "Engineering sync"; and inline errors appearing under the field.
 - Decision tiles: before and after cards for weekly schedule, booking visibility and slot configuration; then the old 149-minute fractional slot failing beside the factor-based options, driven by one shared control.
 - Solution tile: the full redesigned form plays itself, with two sessions, one date mistake caught inline under Valid Till, then a successful save. Visitors can use it afterwards.
-- "A/B testing", headed "Testing the redesign with real people": two short paragraphs about the test, then "What the test showed", a live results card. It has a green "Live" tag and how many people have tested; Form 1 (the current form, in yellow) and Form 2 (the redesign, in purple) with the share who completed the task; a table of task completion rate, time to complete, failed save attempts and ease-of-use rating; a chart of each participant's time to complete; and "Which form would you prefer?" split between Form 1 and Form 2. "Full view" opens more detail, including the parts people found hardest. Under it: "Results update as more participants complete the test."
 - Reflection: two points side by side, "Using AI to understand the codebase" and "Working through real scheduling constraints". Then "Back to top" and the tags.
 - Moving around: on a computer, a left menu lists the chapters, with the current one in green; on phones, a ruler-like pill at the bottom works like a zoom dial: drag to a section and let go. The old address /work/new-case-study still forwards here.
 - The page's search and link-preview description is still a placeholder. Everything visitors see on the page is final.
