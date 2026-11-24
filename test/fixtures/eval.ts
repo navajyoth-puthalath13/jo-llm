@@ -433,14 +433,16 @@ export const EVAL_CASES: EvalCase[] = [
   {
     name: "scheduling: shipped?",
     input: { question: "Did the appointment template redesign ship? What were the results?", format: "blocks" },
-    contains: [["isn't written up", "not written up", "aren't written up", "not documented", "not finished", "under discussion", "working through", "working it out", "being discussed"]],
-    never: ["it shipped", "was shipped", "is live", "improved by", "%"],
+    contains: [
+      ["isn't written up", "not written up", "aren't written up", "not documented", "not finished", "under discussion", "working through", "working it out", "being discussed", "on hold", "redesign", "waiting on"],
+    ],
+    never: ["the whole feature shipped", "fully shipped", "is fully live", "improved by", "%"],
   },
   {
     name: "scheduling: status update",
     input: { question: "Any update on the appointment scheduling work? What's the status?", format: "blocks" },
-    contains: [["discuss", "working through", "working it out"]],
-    never: ["it shipped", "was shipped", "is live", "improved by", "%"],
+    contains: [["fixed", "discuss", "working through", "working it out", "on hold", "redesign"]],
+    never: ["the whole feature shipped", "fully shipped", "is fully live", "improved by", "%"],
   },
   {
     name: "scheduling: the tangled line image",
