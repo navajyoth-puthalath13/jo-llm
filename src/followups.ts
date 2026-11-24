@@ -1,13 +1,16 @@
 // A follow-up question suggestion: a tap-to-send button that continues the conversation with one
-// specific next question, grounded in what Jo's answer actually said about the project in
-// context. Never invents a topic the answer didn't mention, and never repeats one the
-// conversation already asked about.
+// specific next question, grounded in what Jo's answer actually said. Never invents a topic the
+// answer didn't mention, and never repeats one the conversation already asked about.
+//
+// Matched on the answer text alone, not on a separately-resolved "project in context": a question
+// routed by keyword fallback or by the model's own judgment ("What was iteration 3?" — "iteration"
+// isn't even one of the file's keywords) can answer correctly about a project while naming none of
+// the signals projectInContext looks for (page, history, question keywords). The rule topics below
+// are specific enough to the case study's own wording that matching the answer directly is safe.
 //
 // Deterministic, like the rest of Jo's buttons: the model never writes the label or the message.
 
 import type { AskInput } from "./guard/validate";
-import type { Knowledge } from "./knowledge";
-import { projectInContext } from "./project-context";
 import { repliesFor, type Reply } from "./replies";
 
 interface FollowUpRule {
@@ -54,20 +57,17 @@ const RULES: Partial<Record<string, FollowUpRule[]>> = {
 };
 
 /**
- * One grounded follow-up suggestion for the project the answer was about, or null: no project in
- * context, no rule set for that project, nothing in the answer matches, or the conversation
- * already covered it.
+ * One grounded follow-up suggestion for whichever project's rules the answer matches, or null:
+ * nothing in the answer matches any rule, or the conversation already covered it.
  */
-export function followUpFor(knowledge: Knowledge, input: AskInput, answer: string): Reply | null {
-  const project = projectInContext(knowledge, input);
-  if (!project) return null;
-  const rules = RULES[project];
-  if (!rules) return null;
+export function followUpFor(input: AskInput, answer: string): Reply | null {
   const asked = [input.question, ...(input.history ?? []).flatMap((h) => [h.q, h.a])].join("\n");
-  for (const rule of rules) {
-    if (!rule.topic.test(answer)) continue;
-    if (rule.asked.test(asked)) continue;
-    return { id: `followup-${project}`, label: rule.label, type: "continue_conversation", message: rule.message };
+  for (const [project, rules] of Object.entries(RULES)) {
+    for (const rule of rules ?? []) {
+      if (!rule.topic.test(answer)) continue;
+      if (rule.asked.test(asked)) continue;
+      return { id: `followup-${project}`, label: rule.label, type: "continue_conversation", message: rule.message };
+    }
   }
   return null;
 }
@@ -76,9 +76,9 @@ export function followUpFor(knowledge: Knowledge, input: AskInput, answer: strin
  * The replies to offer under an answer: "which project?" or "which role?" replies when Jo just
  * asked one of those, otherwise a single grounded follow-up question if there's one to offer.
  */
-export function allReplies(knowledge: Knowledge, input: AskInput, answer: string): Reply[] {
+export function allReplies(input: AskInput, answer: string): Reply[] {
   const base = repliesFor(answer);
   if (base.length) return base;
-  const followUp = followUpFor(knowledge, input, answer);
+  const followUp = followUpFor(input, answer);
   return followUp ? [followUp] : [];
 }

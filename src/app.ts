@@ -187,7 +187,7 @@ export function createApp(deps: AppDeps) {
               for (const t of chunkAnswer(hit.text)) await writer.token(t);
               const actions = resolveActions(hit.actions);
               if (actions.length) await writer.actions(actions);
-              const replies = allReplies(knowledge, input, hit.text);
+              const replies = allReplies(input, hit.text);
               if (replies.length) await writer.replies(replies);
               await writer.done(true, endsWithQuestion(hit.text));
             } catch {
@@ -250,7 +250,7 @@ export function createApp(deps: AppDeps) {
           const ids = result?.actions ?? [];
           const actions = resolveActions(ids);
           if (actions.length) await writer.actions(actions);
-          const replies = allReplies(knowledge, input, outcome.text);
+          const replies = allReplies(input, outcome.text);
           if (replies.length) await writer.replies(replies);
           await writer.done(false, endsWithQuestion(outcome.text));
           if (key) await putCached(c.env.JO_KV, key, { text: outcome.text, actions: ids }, config.cacheTtlSeconds);
